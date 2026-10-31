@@ -1,9 +1,12 @@
+import time
+
 def create_chat_message(sender_id: str, receiver_id: str, content: str) -> dict:
     return {
         "type": "chat",
         "sender_id": sender_id,
         "receiver_id": receiver_id,
-        "content": content
+        "content": content,
+        "timestamp": time.time()
     }
 
 def validate_chat_message(message: dict) -> bool:
@@ -15,6 +18,7 @@ def validate_chat_message(message: dict) -> bool:
         "sender_id",
         "receiver_id",
         "content"
+        "timestamp"
     }
 
     if not required_fields.issubset(message.keys()):
