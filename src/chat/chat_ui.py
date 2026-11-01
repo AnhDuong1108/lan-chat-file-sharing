@@ -1,8 +1,13 @@
 """ Màn hình hiển thị trên terminal """
+import threading
+
+from sympy import content
+
 from chat_manager import ChatManager
 from peer_discovery.peer_manager import PeerManager
-from datetime import datetime
-from chat.chat_client import send_message
+from datetime import datetime, time
+from chat.chat_client import connect_to_peer, send_message, receive_messages
+from threading import Thread
 
 def display_online_peers(peer_manager: PeerManager) -> list:
 
@@ -17,10 +22,11 @@ def display_online_peers(peer_manager: PeerManager) -> list:
 
     for index, peer in enumerate(peers, start=1):
         list_peer.append({"peer": peer, "index": index})
+        status = peer["status"]
+
         print(
-            f"[{index}] "
-            f"{peer['username']} - "
-            f"{peer['ip']}"
+            f"{index}. {peer['username']} "
+            f"({peer['peer_id']}) - {status}"
         )
 
     print("==================================")
@@ -29,13 +35,13 @@ def display_online_peers(peer_manager: PeerManager) -> list:
 
 def display_chat_history(peer: dict, messages: list):
 
-    peer_name = peer["username"]
-
-    print(f"\n========== HISTORY CHAT WITH {peer_name} ==========")
+    peer_name = peer["username"] 
 
     if not messages:
         print("No messages yet.")
         return
+
+    print(f"\n========== HISTORY CHAT WITH {peer_name} ==========")
 
     previous_timestamp = None
 
@@ -126,7 +132,30 @@ def start_chat_ui(peer_manager: PeerManager, chat_manager: ChatManager):
         conn = chat_manager.connections.get(peer_id)
 
         if conn is None:
-            print("Not connected to this peer!")
+            peer = peer_manager.get_peer(peer_id)
+
+            try:
+                # Lấy kết nối TCP đến peer từ peer_manager
+                conn = connect_to_peer(
+                    peer["ip"],
+                    peer["tcp_port"]
+                )
+
+                # Tạo kết nối từ peer_id đến chat_manager để gửi và nhận tin nhắn
+                chat_manager.connections[peer_id] = conn
+
+                # Start receiving messages in background
+                threading.Thread(
+                    target=receive_messages,
+                    args=(conn, chat_manager.handle_incoming_message),
+                    daemon=True
+                ).start()
+
+            except OSError as e:
+                print(f"Cannot connect to peer: {e}")
+                chat_manager.current_chat_peer = None
+                continue
+
             continue
 
         while True:
@@ -140,4 +169,27 @@ def start_chat_ui(peer_manager: PeerManager, chat_manager: ChatManager):
                 return
 
             if message:
-                send_message(conn, message)
+                chat_message = {
+                    "type": "chat",
+                    "sender_id": peer_manager.self_peer_id,
+                    "receiver_id": peer_id,
+                    "content": message,
+                    "timestamp": time.time()
+                }
+
+                send_message(conn, chat_message)
+
+def change_status():
+    print("\n===== CHANGE STATUS =====")
+    print("1. Online")
+    print("2. Away")
+
+    choice = input("Choose status: ").strip()
+
+    if choice == "1":
+        return "online"
+    elif choice == "2":
+        return "away"
+
+    print("Invalid choice")
+    return None
