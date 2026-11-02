@@ -4,6 +4,11 @@ BROADCAST_INTERVAL = 3
 ## Thời gian tối đa mà một peer có thể không gửi thông báo mới trước khi được xem là offline.
 PEER_TIMEOUT = 10
 
+# ===== Network Discovery =====
+DISCOVERY_PORT = 9999
+UDP_PORT = DISCOVERY_PORT
+BROADCAST_ADDRESS = "255.255.255.255"
+
 # ===== TCP Communication =====
 ## Port TCP dùng để nhận kết nối chat
 CHAT_PORT = 5000

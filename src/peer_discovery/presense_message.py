@@ -51,3 +51,5 @@ def validate_presence_message(message: dict) -> bool:
 
     if not 1 <= message["tcp_port"] <= 65535:
         return False
+    
+    return True
