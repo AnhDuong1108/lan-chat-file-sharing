@@ -1,195 +1,368 @@
 """ Màn hình hiển thị trên terminal """
+from http import client
 import threading
 
 from sympy import content
 
+from chat.chat_message import create_chat_message
 from chat_manager import ChatManager
+from common import message
 from peer_discovery.peer_manager import PeerManager
 from datetime import datetime, time
-from chat.chat_client import connect_to_peer, send_message, receive_messages
+from chat.chat_client import ChatClient, connect_to_peer, send_message, receive_messages
 from threading import Thread
+import threading
+import time
 
-def display_online_peers(peer_manager: PeerManager) -> list:
+from datetime import datetime
 
-    peers = peer_manager.get_online_peers()
-    list_peer = []
+class ChatUI:
 
-    print("\n========== ONLINE PEERS ==========")
+    def __init__(self, peer_manager: PeerManager, chat_manager: ChatManager):
 
-    if not peers:
-        print("No peers are currently online.")
-        return
+        self.peer_manager = peer_manager
+        self.chat_manager = chat_manager
 
-    for index, peer in enumerate(peers, start=1):
-        list_peer.append({"peer": peer, "index": index})
-        status = peer["status"]
+    # ==========================================
+    # DISPLAY ONLINE PEERS
+    # ==========================================
+
+    def display_main_menu(self):
+        print("\n========== P2P CHAT ==========")
+        print("1. Show online peers")
+        print("2. View unread messages")
+        print("3. Change status")
+        print("4. Start chat")
+        print("5. Exit")
+        print("==============================")
+
+        return input("Choose option: ").strip()
+
+    def display_chat_header(self, peer):
+        print(f"\n========== CHAT WITH {peer['username']} ==========")
+        print(f"Peer ID: {peer['peer_id']}")
+        print(f"IP: {peer['ip']}")
+        print(f"Status: {peer['status']}")
+        print("Commands: /back | /exit")
+        print("==========================================")    
+
+    def display_error(self, message):
+        print(f"\n[ERROR] {message}")
+
+    def display_success(self, message):
+        print(f"\n[SUCCESS] {message}")
+
+    def display_online_peers(self) -> list:
+
+        peers = self.peer_manager.get_online_peers()
+        list_peer = []
+
+        print("\n========== ONLINE PEERS ==========")
+
+        if not peers:
+            print("No peers are currently online.")
+            return []
+
+        for index, peer in enumerate(peers, start=1):
+
+            list_peer.append({
+                "peer": peer,
+                "index": index
+            })
+
+            status = peer["status"]
+
+            print(
+                f"{index}. {peer['username']} "
+                f"({peer['peer_id']}) - {status}"
+            )
+
+        print("==================================")
+
+        return list_peer
+
+    # ==========================================
+    # DISPLAY CHAT HISTORY
+    # ==========================================
+
+    def display_chat_history(self, peer: dict, messages: list):
+
+        peer_name = peer["username"]
+
+        if not messages:
+            print("No messages yet.")
+            return
 
         print(
-            f"{index}. {peer['username']} "
-            f"({peer['peer_id']}) - {status}"
+            f"\n========== HISTORY CHAT WITH {peer_name} =========="
         )
 
-    print("==================================")
-    return list_peer
+        previous_timestamp = None
 
+        for message in messages:
 
-def display_chat_history(peer: dict, messages: list):
+            current_timestamp = message["timestamp"]
 
-    peer_name = peer["username"] 
-
-    if not messages:
-        print("No messages yet.")
-        return
-
-    print(f"\n========== HISTORY CHAT WITH {peer_name} ==========")
-
-    previous_timestamp = None
-
-    for message in messages:
-
-        current_timestamp = message["timestamp"]
-
-        # Hiển thị timestamp nếu:
-        # - Đây là tin nhắn đầu tiên
-        # - Hoặc cách tin nhắn trước ít nhất 5 phút
-        if (
-            previous_timestamp is None
-            or current_timestamp - previous_timestamp >= 300
-        ):
-            formatted_time = datetime.fromtimestamp(
-                current_timestamp
-            ).strftime("%H:%M")
-
-            print(f"\n---------- {formatted_time} ----------")
-
-        print(
-            f"{message.get('sender_id', 'Unknown')}: "
-            f"{message['content']}"
-        )
-
-        previous_timestamp = current_timestamp
-
-    print("===================================================")
-
-
-def display_unread_notifications(unread_data: dict):
-
-    print("\n========== UNREAD MESSAGES ==========")
-
-    for peer_name, count in unread_data.items():
-        print(f"{peer_name}: {count}")
-
-    print("=====================================")
-
-def get_user_input():
-
-    message = input("You: ").strip()
-
-    return message
-
-def display_incoming_message(message: dict):
-
-    print("\n[NEW MESSAGE]")
-
-    print(f"From: {message['sender_name']}")
-    print(f"Content: {message['content']}")
-    print(f"Time: {message['timestamp']}")
-
-
-def start_chat_ui(peer_manager: PeerManager, chat_manager: ChatManager):
-
-    while True:
-        # Display online peers
-        list_peer = display_online_peers(peer_manager)
-        # nhập thứ tự peer trên màn hình terminal hoặc nhập tên peer
-        peer_in4 = input("Select peer: ").strip()
-        peer_id = None
-
-        for item in list_peer:
-
-            peer = item["peer"]
-            index = item["index"]
+            # Hiển thị timestamp nếu:
+            # - Đây là tin nhắn đầu tiên
+            # - Hoặc cách tin nhắn trước ít nhất 5 phút
 
             if (
-                peer["username"].lower() == peer_in4.lower()
-                or str(index) == peer_in4
+                previous_timestamp is None
+                or current_timestamp - previous_timestamp >= 300
             ):
-                peer_id = peer["peer_id"]
-                break
 
-        if peer_id is None:
-            print("Invalid peer selection!")
-            continue
-                
+                formatted_time = datetime.fromtimestamp(
+                    current_timestamp
+                ).strftime("%H:%M")
 
-        # Select conversation
-        chat_manager.select_chat_peer(peer_id)
+                print(f"\n---------- {formatted_time} ----------")
 
-        messages = chat_manager.get_messages(peer_id)
+            print(
+                f"{message.get('sender_id', 'Unknown')}: "
+                f"{message['content']}"
+            )
 
-        display_chat_history(peer_id, messages)
+            previous_timestamp = current_timestamp
 
-        conn = chat_manager.connections.get(peer_id)
+        print("===================================================")
 
-        if conn is None:
-            peer = peer_manager.get_peer(peer_id)
+    # ==========================================
+    # DISPLAY UNREAD NOTIFICATIONS
+    # ==========================================
 
-            try:
-                # Lấy kết nối TCP đến peer từ peer_manager
-                conn = connect_to_peer(
-                    peer["ip"],
-                    peer["tcp_port"]
-                )
+    def display_unread_notifications(self, unread_data: dict):
 
-                # Tạo kết nối từ peer_id đến chat_manager để gửi và nhận tin nhắn
-                chat_manager.connections[peer_id] = conn
+        print("\n========== UNREAD MESSAGES ==========")
 
-                # Start receiving messages in background
-                threading.Thread(
-                    target=receive_messages,
-                    args=(conn, chat_manager.handle_incoming_message),
-                    daemon=True
-                ).start()
+        for peer_name, count in unread_data.items():
 
-            except OSError as e:
-                print(f"Cannot connect to peer: {e}")
-                chat_manager.current_chat_peer = None
-                continue
+            print(f"{peer_name}: {count}")
 
-            continue
+        print("=====================================")
+
+    # ==========================================
+    # GET USER INPUT
+    # ==========================================
+
+    def get_user_input(self) -> str:
+
+        message = input("You: ").strip()
+
+        return message
+
+    # ==========================================
+    # DISPLAY INCOMING MESSAGE
+    # ==========================================
+
+    def display_incoming_message(self, message: dict):
+
+        print("\n[NEW MESSAGE]")
+
+        print(f"From: {message['sender_name']}")
+        print(f"Content: {message['content']}")
+        print(f"Time: {message['timestamp']}")
+
+    # ==========================================
+    # CHANGE STATUS
+    # ==========================================
+
+    def change_status(self):
+
+        print("\n===== CHANGE STATUS =====")
+        print("1. Online")
+        print("2. Away")
+
+        choice = input("Choose status: ").strip()
+
+        if choice == "1":
+            return "online"
+
+        elif choice == "2":
+            return "away"
+
+        print("Invalid choice")
+
+        return None
+
+    # ==========================================
+    # START CHAT UI
+    # ==========================================
+
+    def start_chat(self):
 
         while True:
 
-            message = get_user_input()
+            # ==================================
+            # DISPLAY ONLINE PEERS
+            # ==================================
 
-            if message == "/back":
-                break
+            list_peer = self.display_online_peers()
 
-            if message == "/exit":
+            if not list_peer:
+                choice = input(
+                    "\nPress Enter to refresh or /exit to quit: "
+                ).strip()
+
+                if choice == "/exit":
+                    return
+
+                continue
+
+            # ==================================
+            # SELECT PEER
+            # ==================================
+
+            peer_in4 = input("\nSelect peer: ").strip()
+
+            if peer_in4 == "/exit":
                 return
 
-            if message:
-                chat_message = {
-                    "type": "chat",
-                    "sender_id": peer_manager.self_peer_id,
-                    "receiver_id": peer_id,
-                    "content": message,
-                    "timestamp": time.time()
-                }
+            peer_id = None
 
-                send_message(conn, chat_message)
+            for item in list_peer:
 
-def change_status():
-    print("\n===== CHANGE STATUS =====")
-    print("1. Online")
-    print("2. Away")
+                peer = item["peer"]
+                index = item["index"]
 
-    choice = input("Choose status: ").strip()
+                if (
+                    peer["username"].lower() == peer_in4.lower()
+                    or str(index) == peer_in4
+                ):
+                    peer_id = peer["peer_id"]
+                    break
 
-    if choice == "1":
-        return "online"
-    elif choice == "2":
-        return "away"
+            if peer_id is None:
+                print("Invalid peer selection!")
+                continue
 
-    print("Invalid choice")
-    return None
+            # ==================================
+            # SELECT CONVERSATION
+            # ==================================
+
+            self.chat_manager.select_chat_peer(peer_id)
+
+            peer = self.peer_manager.get_peer(peer_id)
+
+            if peer is None:
+                print("Peer is no longer available.")
+                self.chat_manager.current_chat_peer = None
+                continue
+
+            messages = self.chat_manager.get_messages(peer_id)
+
+            self.display_chat_history(peer, messages)
+
+            # ==================================
+            # ESTABLISH TCP CONNECTION
+            # ==================================
+
+            
+            conn = self.chat_manager.connections.get(peer_id)
+            
+
+            if conn is None:
+
+                try:
+                    conn = connect_to_peer(
+                        peer["ip"],
+                        peer["tcp_port"]
+                    )
+
+                    if conn is None:
+                        print("Cannot connect to peer.")
+                        self.chat_manager.current_chat_peer = None
+                        continue
+                    
+                    self.chat_manager.connections[peer_id] = conn
+
+                    # Start receiving messages in background
+                    threading.Thread(
+                        target= receive_messages,
+                        args=(
+                            conn,
+                            self.chat_manager.handle_incoming_message
+                        ),
+                        daemon=True
+                    ).start()
+
+                except OSError as e:
+
+                    print(f"Cannot connect to peer: {e}")
+
+                    self.chat_manager.current_chat_peer = None
+                    continue
+
+            # ==================================
+            # CHAT LOOP
+            # ==================================
+
+            self.chat_loop(peer_id, conn)
+
+    def chat_loop(self, peer_id, conn):
+
+        while True:
+
+            message = self.get_user_input()
+
+            if message in ("/back", "/exit"):
+                self.chat_manager.current_chat_peer = None
+                return
+
+            if not message:
+                continue
+
+            chat_message = create_chat_message(
+                sender_id=self.peer_manager.self_peer_id,
+                receiver_id=peer_id,
+                content=message
+            )
+
+            success = send_message(conn, chat_message)
+
+            if not success:
+                print("Cannot send message.")
+
+                self.chat_manager.current_chat_peer = None
+                return
+
+    def start(self):
+
+        while True:
+
+            # Display main menu
+            self.display_main_menu()
+
+            choice = input("\nSelect option: ").strip()
+
+            # 1. Chat with a peer
+            if choice == "1":
+
+                self.start_chat()
+
+            # 2. View online peers
+            elif choice == "2":
+
+                self.display_online_peers()
+
+            # 3. View unread messages
+            elif choice == "3":
+
+                self.display_unread_notifications(
+                    self.chat_manager.get_unread_count()
+                )
+
+            # 4. Change status
+            elif choice == "4":
+
+                self.change_status()
+
+            # 5. Exit
+            elif choice == "5":
+
+                print("Exiting P2P Chat App...")
+                return
+
+            else:
+
+                print("Invalid option. Please try again.")
