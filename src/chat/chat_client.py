@@ -8,11 +8,10 @@ class ChatClient:
     def connect(self) -> bool:
         pass
 
-    def send_message(self, message: dict) -> bool:
+    def send_message(self, conn, message: dict) -> bool:
         pass
 
-    def receive_messages(self, callback):
-        
+    def receive_messages(self, conn, callback):
         pass
 
     def close(self):

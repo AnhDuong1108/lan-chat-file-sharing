@@ -9,7 +9,7 @@ from chat_manager import ChatManager
 from common import message
 from peer_discovery.peer_manager import PeerManager
 from datetime import datetime, time
-from chat.chat_client import ChatClient, connect_to_peer, send_message, receive_messages
+from chat.chat_client import ChatClient, send_message
 from threading import Thread
 import threading
 import time
@@ -305,14 +305,15 @@ class ChatUI:
             # CHAT LOOP
             # ==================================
 
-            self.chat_loop(peer_id, conn)
+            self.chat_loop(peer, conn)
 
-    def chat_loop(self, peer_id, conn):
-
+    def chat_loop(self, peer, conn):
+        client = ChatClient(peer["peer_id"], peer["ip"], peer["tcp_port"])
+        
         while True:
 
             message = self.get_user_input()
-
+            
             if message in ("/back", "/exit"):
                 print("Exiting chat...")
                 self.chat_manager.current_chat_peer = None
@@ -323,11 +324,11 @@ class ChatUI:
 
             chat_message = create_chat_message(
                 sender_id=self.peer_manager.self_peer_id,
-                receiver_id=peer_id,
+                receiver_id=peer["peer_id"],
                 content=message
             )
 
-            success = send_message(conn, chat_message)
+            success = client.send_message(conn, chat_message)
 
             if not success:
                 self.display_error(message)
