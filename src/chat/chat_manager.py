@@ -1,6 +1,9 @@
 
-class ChatManager:
+import socket
 
+
+class ChatManager:
+    # Class này của Hải Việt
     def __init__(self, self_peer_id, peer_manager):
         self.self_peer_id = self_peer_id
         self.peer_manager = peer_manager
@@ -25,6 +28,14 @@ class ChatManager:
         # Đánh dấu tin nhắn đã đọc
         pass
 
-    def get_messages(self, peer_id):
+    def get_message(self, peer_id):
         # Lấy lịch sử trò chuyện với peer
+        pass
+
+    def get_connection(self, peer_id, conn):
+        # Lấy kết nối socket với peer
+        pass
+
+    def remove_connection(self, peer_id):
+        # Xóa kết nối socket với peer
         pass

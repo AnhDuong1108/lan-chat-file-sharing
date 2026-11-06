@@ -45,6 +45,28 @@ class ChatServer:
 
         return server_socket
 
+
+    # ==========================================
+    #  CLIENT MANAGEMENT
+    # ==========================================
+
+    def add_client(self, conn, addr):
+
+        with self.lock:
+            self.clients[conn] = addr
+
+        print(f"Client added: {addr}")
+
+    def remove_client(self, conn):
+
+        with self.lock:
+            self.clients.pop(conn, None)
+
+    def get_client(self, peer_id):
+
+        with self.lock:
+            return self.clients.get(peer_id)
+
     # ==========================================
     # HANDLE CLIENT
     # ==========================================
@@ -90,13 +112,11 @@ class ChatServer:
             print(f"Connection lost: {addr} - {exc}")
 
         finally:
-
-            with self.lock:
-                self.clients.pop(conn, None)
-
+            self.remove_client(conn)
             conn.close()
 
             print(f"Disconnected: {addr}")
+
 
     # ==========================================
     # START CHAT SERVER
@@ -116,8 +136,7 @@ class ChatServer:
 
                 conn, addr = self.server_socket.accept()
 
-                with self.lock:
-                    self.clients[conn] = addr
+                self.add_client(conn, addr)
 
                 client_thread = threading.Thread(
                     target=self.handle_client,
@@ -145,6 +164,7 @@ class ChatServer:
     def stop(self):
 
         self.running = False
+        print("Stopping TCP Chat Server...")
 
         if self.server_socket:
             self.server_socket.close()
