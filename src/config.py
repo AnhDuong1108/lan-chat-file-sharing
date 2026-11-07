@@ -1,13 +1,13 @@
-# config.py
+
+## Khoảng thời gian giữa hai lần phát thông báo presence
+BROADCAST_INTERVAL = 3
+## Thời gian tối đa mà một peer có thể không gửi thông báo mới trước khi được xem là offline.
+PEER_TIMEOUT = 10
 
 # ===== Network Discovery =====
 DISCOVERY_PORT = 9999
 UDP_PORT = DISCOVERY_PORT
 BROADCAST_ADDRESS = "255.255.255.255"
-## Khoảng thời gian giữa hai lần phát thông báo presence
-BROADCAST_INTERVAL = 3
-## Thời gian tối đa mà một peer có thể không gửi thông báo mới trước khi được xem là offline.
-PEER_TIMEOUT = 10
 
 # ===== TCP Communication =====
 ## Port TCP dùng để nhận kết nối chat
@@ -27,4 +27,3 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 DOWNLOAD_DIR = "downloads"
 
 # ===== Message Configuration =====
-MAX_MESSAGE_SIZE = 1024 * 1024

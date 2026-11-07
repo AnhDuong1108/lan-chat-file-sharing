@@ -51,9 +51,5 @@ def validate_presence_message(message: dict) -> bool:
 
     if not 1 <= message["tcp_port"] <= 65535:
         return False
-
-    # Hỗ trợ presence online, offline và away.
-    if message["status"] not in ("online", "offline", "away"):
-        return False
-
+    
     return True
