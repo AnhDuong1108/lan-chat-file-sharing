@@ -17,7 +17,7 @@ def validate_chat_message(message: dict) -> bool:
         "type",
         "sender_id",
         "receiver_id",
-        "content"
+        "content",
         "timestamp"
     }
 

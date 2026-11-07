@@ -119,6 +119,44 @@ class PeerManager:
                 online_peers.append(peer.copy())
             return online_peers
 
+    def get_away_peers(self, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
+        """
+        Lấy danh sách các peer có status = 'away'.
+
+        :param timeout: (Tùy chọn) Thời gian timeout tính bằng giây. Nếu được chỉ định,
+                        peer chỉ được coi là away nếu status == 'away' và
+                        (thời gian hiện tại - last_seen) <= timeout.
+                        Nếu không chỉ định (None), chỉ kiểm tra status == 'away'.
+        :return: Danh sách (list) các dictionary thông tin peer có status == 'away'.
+        """
+        with self._lock:
+            now = time.time()
+            away_peers = []
+            for peer in self.peers.values():
+                if peer.get("status") != "away":
+                    continue
+                if timeout is not None:
+                    last_seen = peer.get("last_seen", 0.0)
+                    if (now - last_seen) > timeout:
+                        continue
+                away_peers.append(peer.copy())
+            return away_peers
+
+    def cleanup_inactive_peers(self, timeout: float = 10) -> None:
+        """
+        Đánh dấu peer là offline nếu thời gian không hoạt động vượt quá timeout.
+
+        :param timeout: Thời gian không hoạt động tối đa tính bằng giây trước khi
+                        được đánh dấu offline (mặc định: 10 giây).
+        :return: None
+        """
+        with self._lock:
+            now = time.time()
+            for peer in self.peers.values():
+                last_seen = peer.get("last_seen", 0.0)
+                if (now - last_seen) > timeout:
+                    peer["status"] = "offline"
+
     def remove_peer(self, peer_id: str) -> bool:
         """
         Xóa một peer khỏi danh sách khi cần.

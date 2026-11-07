@@ -2,14 +2,16 @@
 from http import client
 import threading
 
-from sympy import content
 
 from chat.chat_message import create_chat_message
-from chat_manager import ChatManager
+try:
+    from chat.chat_manager import ChatManager
+except ImportError:
+    from chat_manager import ChatManager
 from common import message
 from peer_discovery.peer_manager import PeerManager
 from datetime import datetime, time
-from chat.chat_client import ChatClient, send_message
+from chat.chat_client import ChatClient
 from threading import Thread
 import threading
 import time

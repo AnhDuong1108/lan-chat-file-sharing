@@ -166,6 +166,70 @@ class TestPeerManager(unittest.TestCase):
         self.assertEqual(peer["username"], "Hoa")
         self.assertEqual(peer["ip"], "192.168.1.200")
 
+    def test_07_get_away_peers(self):
+        """Kiểm tra get_away_peers trả về danh sách peer có status = away."""
+        # Thêm peer online
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-online", "username": "UserOnline", "tcp_port": 5000, "status": "online"},
+            "192.168.1.101"
+        )
+        # Thêm peer away
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-away-1", "username": "UserAway1", "tcp_port": 5000, "status": "away"},
+            "192.168.1.102"
+        )
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-away-2", "username": "UserAway2", "tcp_port": 5000, "status": "away"},
+            "192.168.1.103"
+        )
+        # Thêm peer offline
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-offline", "username": "UserOffline", "tcp_port": 5000, "status": "offline"},
+            "192.168.1.104"
+        )
+
+        away_peers = self.manager.get_away_peers()
+        self.assertIsInstance(away_peers, list)
+        self.assertEqual(len(away_peers), 2)
+        away_ids = {p["peer_id"] for p in away_peers}
+        self.assertEqual(away_ids, {"pc-away-1", "pc-away-2"})
+        for p in away_peers:
+            self.assertEqual(p["status"], "away")
+
+    def test_08_cleanup_inactive_peers(self):
+        """Kiểm tra cleanup_inactive_peers đánh dấu peer là offline nếu quá timeout."""
+        # Thêm peer 1: vừa mới hoạt động
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-active", "username": "ActiveUser", "tcp_port": 5000, "status": "online"},
+            "192.168.1.110"
+        )
+        # Thêm peer 2: không hoạt động quá 15 giây
+        self.manager.update_peer(
+            {"type": "presence", "peer_id": "pc-inactive", "username": "InactiveUser", "tcp_port": 5000, "status": "online"},
+            "192.168.1.111"
+        )
+        # Giả lập last_seen cách đây 15s
+        with self.manager._lock:
+            self.manager.peers["pc-inactive"]["last_seen"] = time.time() - 15.0
+
+        # Gọi cleanup_inactive_peers với timeout = 10s
+        result = self.manager.cleanup_inactive_peers(timeout=10)
+        self.assertIsNone(result)
+
+        # Peer inactive phải bị chuyển sang offline
+        inactive_peer = self.manager.get_peer("pc-inactive")
+        self.assertEqual(inactive_peer["status"], "offline")
+
+        # Peer active vẫn giữ nguyên online
+        active_peer = self.manager.get_peer("pc-active")
+        self.assertEqual(active_peer["status"], "online")
+
+        # get_online_peers giờ chỉ còn pc-active
+        online_peers = self.manager.get_online_peers()
+        online_ids = [p["peer_id"] for p in online_peers]
+        self.assertIn("pc-active", online_ids)
+        self.assertNotIn("pc-inactive", online_ids)
+
 
 class TestMainOrchestration(unittest.TestCase):
     """Kiểm thử main.py khởi chạy và phối hợp các thành phần discovery."""
