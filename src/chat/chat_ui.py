@@ -1,6 +1,9 @@
 """ Màn hình hiển thị trên terminal """
 from datetime import datetime
-
+from prompt_toolkit import PromptSession
+from prompt_toolkit.patch_stdout import patch_stdout
+import queue
+import threading
 from chat.chat_client import ChatClient
 from chat.chat_manager import ChatManager
 from chat.chat_message import create_chat_message, validate_chat_message
@@ -14,6 +17,12 @@ class ChatUI:
         self.peer_manager = peer_manager
         self.chat_manager = chat_manager
         self.set_status = set_status
+
+        self.session = PromptSession()
+
+        self.receive_thread = None
+        self.incoming_message_queue = queue.Queue()
+        self.receive_stop_event = threading.Event()
 
     # ==========================================
     # DISPLAY MAIN MENU
@@ -132,7 +141,8 @@ class ChatUI:
 
         print("\n========== UNREAD MESSAGES ==========")
 
-        for peer_name, count in unread_data.items():
+        for peer_id, count in unread_data.items():
+            peer_name = self.peer_manager.get_peer(peer_id).get("username", peer_id)
 
             print(f"{peer_name}: {count}")
 
@@ -144,9 +154,9 @@ class ChatUI:
 
     def get_user_input(self) -> str:
 
-        message = input("You: ").strip()
+        message = self.session.prompt("You: ")
 
-        return message
+        return message.strip()
 
     # ==========================================
     # DISPLAY INCOMING MESSAGE
@@ -154,11 +164,34 @@ class ChatUI:
 
     def display_incoming_message(self, message: dict):
 
-        print("\n[NEW MESSAGE]")
 
-        print(f"From: {message.get('sender_name', message['sender_id'])}")
-        print(f"Content: {message['content']}")
-        print(f"Time: {message['timestamp']}")
+        sender_id = message["sender_id"]
+        sender_name = self.peer_manager.get_peer(sender_id).get("username", sender_id)
+        timestamp = message["timestamp"]
+
+        # Lưu thời điểm hiển thị tin nhắn gần nhất
+        if not hasattr(self, "last_message_time"):
+            self.last_message_time = {}
+
+        last_time = self.last_message_time.get(sender_id)
+
+        # Kiểm tra tin nhắn mới hoặc cách nhau ít nhất 5 phút
+        is_new_message = (
+            last_time is None or timestamp - last_time >= 300
+        )
+
+        if is_new_message:
+
+            message_time = datetime.fromtimestamp(timestamp)
+            print(f"Time: {message_time.strftime('%H:%M:%S')}")
+            print(f"{message.get('sender_name', sender_name)}: {message['content']}")
+            
+        else:
+
+            print(f"\n{message.get('sender_name', sender_name)}: {message['content']}")
+
+        # Cập nhật thời điểm tin nhắn gần nhất
+        self.last_message_time[sender_id] = timestamp
 
     def handle_incoming_message(self, message: dict):
         if not validate_chat_message(message):
@@ -176,6 +209,13 @@ class ChatUI:
         self.chat_manager.handle_incoming_message(message)
         if self.chat_manager.current_chat_peer == sender_id:
             self.display_incoming_message(message)
+
+
+    def handle_received_message(self, message):
+
+        self.chat_manager.handle_incoming_message(message)
+
+        self.display_incoming_message(message)
 
     # ==========================================
     # CHANGE STATUS
@@ -218,7 +258,7 @@ class ChatUI:
                     "\nPress Enter to refresh or /exit to quit: "
                 ).strip()
 
-                if choice == "/exit":
+                if choice == "/exit" or choice == "":
                     return
 
                 continue
@@ -229,7 +269,7 @@ class ChatUI:
 
             peer_in4 = input("\nSelect peer: ").strip()
 
-            if peer_in4 == "/exit":
+            if peer_in4 == "/exit" or peer_in4 == "":
                 return
 
             peer_id = None
@@ -274,38 +314,81 @@ class ChatUI:
                     continue
 
                 self.chat_manager.add_connection(peer_id, conn)
-                self.chat_loop(peer, conn)
+                self.chat_loop(peer, conn, client)
             finally:
                 self.chat_manager.select_chat_peer(None)
                 self.chat_manager.remove_connection(peer_id)
                 client.close(conn)
 
-    def chat_loop(self, peer, conn):
-        client = ChatClient(peer["peer_id"], peer["ip"], peer["tcp_port"])
-        
-        while True:
+    def receive_message_worker(self, client, conn):
 
-            message = self.get_user_input()
-            
-            if message in ("/back", "/exit"):
-                print("Exiting chat...")
-                return
+        while not self.receive_stop_event.is_set():
 
-            if not message:
-                continue
-
-            chat_message = create_chat_message(
-                sender_id=self.peer_manager.self_peer_id,
-                receiver_id=peer["peer_id"],
-                content=message
+            received = client.receive_messages(
+                conn,
+                callback=self.incoming_message_queue.put
             )
 
-            success = client.send_message(conn, chat_message)
+            if received is False:
+                break
+    def process_incoming_messages(self):
 
-            if not success:
-                self.display_error("Could not send the message.")
-                return
-            self.chat_manager.add_message(peer["peer_id"], chat_message)
+        while not self.incoming_message_queue.empty():
+
+            message = self.incoming_message_queue.get()
+
+            self.chat_manager.handle_incoming_message(message)
+
+            self.display_incoming_message(message)
+
+            self.incoming_message_queue.task_done()
+
+    def chat_loop(self, peer, conn, client):
+
+        self.receive_stop_event.clear()
+
+        self.receive_thread = threading.Thread(
+            target=self.receive_message_worker,
+            args=(client, conn),
+            daemon=True
+        )
+
+        self.receive_thread.start()
+
+        try:
+            # Cho phép thread khác print mà không phá dòng nhập
+            with patch_stdout():
+
+                while True:
+
+                    message = self.get_user_input()
+
+                    if message in ("/back", "/exit", "/quit", ""):
+                        print("Exiting chat...")
+                        return
+
+                    chat_message = create_chat_message(
+                        sender_id=self.peer_manager.self_peer_id,
+                        receiver_id=peer["peer_id"],
+                        content=message
+                    )
+
+                    success = client.send_message(conn, chat_message)
+
+                    if not success:
+                        self.display_error("Could not send message.")
+                        return
+
+                    self.chat_manager.add_message(
+                        peer["peer_id"],
+                        chat_message
+                    )
+
+        finally:
+            self.receive_stop_event.set()
+
+            if self.receive_thread.is_alive():
+                self.receive_thread.join(timeout=1)
 
     def start(self):
 

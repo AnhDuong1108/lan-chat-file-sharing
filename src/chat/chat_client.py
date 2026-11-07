@@ -35,7 +35,7 @@ class ChatClient:
             return False
         return True
 
-    def receive_messages(self, conn, callback: Callable[[dict], None]) -> bool:
+    def receive_messages(self, conn, callback: Callable[[dict], None]) -> bool|None:
         """Gọi callback cho một tin hợp lệ. Mỗi socket cần một luồng đọc."""
         if conn is None:
             return False
@@ -59,7 +59,7 @@ class ChatClient:
             except socket.timeout:
                 if buffer:
                     self._buffers[conn] = buffer
-                return False
+                return None
             except OSError:
                 return False
             if not data:
