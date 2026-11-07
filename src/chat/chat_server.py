@@ -1,15 +1,16 @@
 import socket
 import threading
-from common.message import *
-from src.config import CHAT_PORT
+from common.message import decode_message
+from config import BUFFER_SIZE, CHAT_PORT
 
 
 class ChatServer:
 
-    def __init__(self, host="0.0.0.0", port=CHAT_PORT):
+    def __init__(self, host="0.0.0.0", port=CHAT_PORT, on_message=None):
 
         self.host = host
         self.port = port
+        self.on_message = on_message
 
         self.server_socket = None
 
@@ -31,15 +32,15 @@ class ChatServer:
             socket.SOCK_STREAM
         )
 
-        server_socket.setsockopt(
-            socket.SOL_SOCKET,
-            socket.SO_REUSEADDR,
-            1
-        )
-
-        server_socket.bind((self.host, self.port))
-
-        server_socket.listen()
+        try:
+            reuse_option = getattr(socket, "SO_EXCLUSIVEADDRUSE", socket.SO_REUSEADDR)
+            server_socket.setsockopt(socket.SOL_SOCKET, reuse_option, 1)
+            server_socket.bind((self.host, self.port))
+            server_socket.listen()
+            server_socket.settimeout(0.2)
+        except OSError:
+            server_socket.close()
+            raise
 
         self.server_socket = server_socket
 
@@ -81,7 +82,7 @@ class ChatServer:
 
             while self.running:
 
-                data = conn.recv(4096)
+                data = conn.recv(BUFFER_SIZE)
 
                 if not data:
                     break
@@ -99,13 +100,17 @@ class ChatServer:
 
                         message = decode_message(raw_message)
 
-                        print("Received:", message)
-
-                    except (ValueError, UnicodeDecodeError) as exc:
+                    except (ValueError, RecursionError) as exc:
 
                         print(
                             f"Invalid message from {addr}: {exc}"
                         )
+                        continue
+
+                    if self.on_message is None:
+                        print("Received:", message)
+                    else:
+                        self.on_message(message)
 
         except (ConnectionResetError, OSError) as exc:
 
@@ -114,6 +119,10 @@ class ChatServer:
         finally:
             self.remove_client(conn)
             conn.close()
+            with self.lock:
+                worker = threading.current_thread()
+                if worker in self.client_threads:
+                    self.client_threads.remove(worker)
 
             print(f"Disconnected: {addr}")
 
@@ -122,62 +131,80 @@ class ChatServer:
     # START CHAT SERVER
     # ==========================================
 
-    def start(self):
-
-        self.create_server_socket()
-
-        self.running = True
+    def start(self, background=False):
+        with self.lock:
+            if self.running:
+                raise RuntimeError("Chat server is already running")
+            server_socket = self.create_server_socket()
+            self.running = True
 
         print("TCP Chat Server is running...")
+        if background:
+            worker = threading.Thread(
+                target=self._accept_clients, args=(server_socket,), daemon=True
+            )
+            try:
+                worker.start()
+            except RuntimeError:
+                self.stop()
+                raise
+            return worker
 
+        self._accept_clients(server_socket)
+
+    def _accept_clients(self, server_socket):
         try:
-
-            while self.running:
-
-                conn, addr = self.server_socket.accept()
-
-                self.add_client(conn, addr)
-
-                client_thread = threading.Thread(
-                    target=self.handle_client,
-                    args=(conn, addr),
-                    daemon=True
-                )
-
-                self.client_threads.append(client_thread)
-
-                client_thread.start()
+            while self.server_socket is server_socket and self.running:
+                try:
+                    conn, addr = server_socket.accept()
+                except socket.timeout:
+                    continue
+                with self.lock:
+                    if self.server_socket is not server_socket or not self.running:
+                        conn.close()
+                        return
+                    worker = threading.Thread(
+                        target=self.handle_client, args=(conn, addr), daemon=True
+                    )
+                    self.clients[conn] = addr
+                    self.client_threads.append(worker)
+                    try:
+                        worker.start()
+                    except RuntimeError:
+                        self.client_threads.remove(worker)
+                        raise
 
         except OSError as e:
 
-            if self.running:
+            if self.server_socket is server_socket and self.running:
                 print(f"Server error: {e}")
 
         finally:
 
-            self.stop()
+            with self.lock:
+                if self.server_socket is server_socket:
+                    self._stop()
 
     # ==========================================
     # STOP CHAT SERVER
     # ==========================================
 
     def stop(self):
+        with self.lock:
+            self._stop()
 
+    def _stop(self):
         self.running = False
-        print("Stopping TCP Chat Server...")
 
         if self.server_socket:
             self.server_socket.close()
             self.server_socket = None
 
-        with self.lock:
+        for conn in self.clients:
+            try:
+                conn.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            conn.close()
 
-            for conn in list(self.clients.keys()):
-                try:
-                    conn.shutdown(socket.SHUT_RDWR)
-                except OSError:
-                    pass
-
-                conn.close()
-
-            self.clients.clear()
+        self.clients.clear()

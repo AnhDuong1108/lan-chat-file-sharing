@@ -1,5 +1,4 @@
 import argparse
-import datetime
 import logging
 import os
 import signal
@@ -22,6 +21,9 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
+from chat.chat_manager import ChatManager
+from chat.chat_server import ChatServer
+from chat.chat_ui import ChatUI
 from config import BROADCAST_INTERVAL, CHAT_PORT, DISCOVERY_PORT
 from peer_discovery.broadcast import PresenceBroadcaster, start_broadcast
 from peer_discovery.listen import PresenceListener, start_listener
@@ -72,7 +74,11 @@ def init_discovery(
         username,
         tcp_port,
     )
-    broadcaster = start_broadcast(peer_id, username, tcp_port)
+    try:
+        broadcaster = start_broadcast(peer_id, username, tcp_port)
+    except BaseException:
+        listener.stop()
+        raise
 
     return peer_manager, broadcaster, listener
 
@@ -135,7 +141,7 @@ def display_peer_list(peer_manager: PeerManager) -> None:
 
 def main(args: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
-        description="LAN Chat & File Sharing - Peer Discovery & Management"
+        description="LAN Chat & File Sharing"
     )
     parser.add_argument(
         "--peer-id",
@@ -165,7 +171,7 @@ def main(args: Optional[List[str]] = None) -> int:
         "--duration",
         type=float,
         default=None,
-        help="Thời gian chạy thử tính bằng giây rồi tự dừng (None: chạy liên tục)",
+        help="Chạy chế độ thử peer discovery trong số giây đã cho rồi tự dừng",
     )
 
     parsed_args = parser.parse_args(args)
@@ -177,7 +183,7 @@ def main(args: Optional[List[str]] = None) -> int:
     duration = parsed_args.duration
 
     print("=" * 80)
-    print("               LAN CHAT & FILE SHARING - PEER DISCOVERY")
+    print("                        LAN CHAT & FILE SHARING")
     print("=" * 80)
     print(f"[*] Self Peer ID   : {peer_id}")
     print(f"[*] Username       : {username}")
@@ -186,46 +192,63 @@ def main(args: Optional[List[str]] = None) -> int:
     print(f"[*] Nhấn Ctrl+C để dừng chương trình an toàn.")
     print("=" * 80)
 
-    peer_manager = None
     broadcaster = None
     listener = None
+    chat_server = None
+    chat_worker = None
     running = True
+    previous_handlers = {}
 
     def signal_handler(sig, frame):
         nonlocal running
         print("\n[!] Đang nhận tín hiệu thoát...")
+        if duration is None:
+            raise KeyboardInterrupt
         running = False
 
     try:
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-    except Exception:
-        pass
-
-    try:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                previous_handlers[sig] = signal.signal(sig, signal_handler)
+            except ValueError:
+                # signal.signal chỉ dùng được từ luồng chính.
+                break
         peer_manager, broadcaster, listener = init_discovery(
             peer_id=peer_id, username=username, tcp_port=tcp_port
         )
 
-        start_time = time.time()
+        if duration is None:
+            chat_manager = ChatManager(peer_id, peer_manager)
+            chat_ui = ChatUI(peer_manager, chat_manager, broadcaster.set_status)
+            chat_server = ChatServer(port=tcp_port, on_message=chat_ui.handle_incoming_message)
+            chat_worker = chat_server.start(background=True)
+            chat_ui.start()
+            return 0
+
+        start_time = time.monotonic()
         while running:
             display_peer_list(peer_manager)
 
-            # Kiểm tra thời lượng chạy nếu có truyền --duration
-            if duration is not None and (time.time() - start_time) >= duration:
+            if time.monotonic() - start_time >= duration:
                 logger.info("Reached duration limit (%.1f s). Exiting...", duration)
                 break
 
             time.sleep(interval)
 
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, EOFError):
         pass
     except Exception as exc:
         logger.exception("An error occurred during execution: %s", exc)
         return 1
     finally:
         stop_discovery(broadcaster, listener)
-        print("\n[+] Đã đóng tất cả tài nguyên discovery an toàn. Tạm biệt!")
+        if chat_server is not None:
+            chat_server.stop()
+        if chat_worker is not None:
+            chat_worker.join()
+        for sig, previous_handler in previous_handlers.items():
+            signal.signal(sig, previous_handler)
+        print("\n[+] Đã đóng ứng dụng. Tạm biệt!")
 
     return 0
 

@@ -1,29 +1,19 @@
 """ Màn hình hiển thị trên terminal """
-from http import client
-import threading
-
-
-from chat.chat_message import create_chat_message
-try:
-    from chat.chat_manager import ChatManager
-except ImportError:
-    from chat_manager import ChatManager
-from common import message
-from peer_discovery.peer_manager import PeerManager
-from datetime import datetime, time
-from chat.chat_client import ChatClient
-from threading import Thread
-import threading
-import time
-
 from datetime import datetime
+
+from chat.chat_client import ChatClient
+from chat.chat_manager import ChatManager
+from chat.chat_message import create_chat_message, validate_chat_message
+from peer_discovery.peer_manager import PeerManager
+
 
 class ChatUI:
 
-    def __init__(self, peer_manager: PeerManager, chat_manager: ChatManager):
+    def __init__(self, peer_manager: PeerManager, chat_manager: ChatManager, set_status=None):
 
         self.peer_manager = peer_manager
         self.chat_manager = chat_manager
+        self.set_status = set_status
 
     # ==========================================
     # DISPLAY MAIN MENU
@@ -166,9 +156,26 @@ class ChatUI:
 
         print("\n[NEW MESSAGE]")
 
-        print(f"From: {message['sender_name']}")
+        print(f"From: {message.get('sender_name', message['sender_id'])}")
         print(f"Content: {message['content']}")
         print(f"Time: {message['timestamp']}")
+
+    def handle_incoming_message(self, message: dict):
+        if not validate_chat_message(message):
+            return
+        sender_id = message["sender_id"]
+        if message["receiver_id"] != self.chat_manager.self_peer_id:
+            return
+        if sender_id == self.chat_manager.self_peer_id:
+            return
+        try:
+            datetime.fromtimestamp(message["timestamp"])
+        except (TypeError, ValueError, OverflowError, OSError):
+            return
+
+        self.chat_manager.handle_incoming_message(message)
+        if self.chat_manager.current_chat_peer == sender_id:
+            self.display_incoming_message(message)
 
     # ==========================================
     # CHANGE STATUS
@@ -247,67 +254,31 @@ class ChatUI:
             # SELECT CONVERSATION
             # ==================================
 
-            self.chat_manager.select_chat_peer(peer_id)
-
             peer = self.peer_manager.get_peer(peer_id)
 
             if peer is None:
                 print("Peer is no longer available.")
-                self.chat_manager.current_chat_peer = None
                 continue
 
-            messages = self.chat_manager.get_messages(peer_id)
-
-            self.display_chat_history(peer, messages)
-
-            # ==================================
-            # ESTABLISH TCP CONNECTION
-            # ==================================
-
-            conn = self.chat_manager.connections.get(peer_id)
-
-            if conn is None:
-
-                client = ChatClient(
-                    peer_id,
-                    peer["ip"],
-                    peer["tcp_port"]
-                )
-
+            client = ChatClient(peer_id, peer["ip"], peer["tcp_port"])
+            self.chat_manager.select_chat_peer(peer_id)
+            conn = None
+            try:
+                self.chat_manager.mark_messages_as_read(peer_id)
+                self.display_chat_header(peer)
+                self.display_chat_history(peer, self.chat_manager.get_messages(peer_id))
                 try:
-
                     conn = client.connect()
-
-                    if conn is None:
-                        print("Cannot connect to peer.")
-                        self.chat_manager.current_chat_peer = None
-                        continue
-
-                    # Lưu TCP socket vào ChatManager
-                    self.chat_manager.connections[peer_id] = conn
-
-                    # Start receiving messages in background
-                    threading.Thread(
-                        target=client.receive_messages,
-                        args=(
-                            conn,
-                            self.chat_manager.handle_incoming_message
-                        ),
-                        daemon=True
-                    ).start()
-
-                except OSError as e:
-
-                    print(f"Cannot connect to peer: {e}")
-
-                    self.chat_manager.current_chat_peer = None
+                except OSError as exc:
+                    self.display_error(f"Cannot connect to peer: {exc}")
                     continue
 
-            # ==================================
-            # CHAT LOOP
-            # ==================================
-
-            self.chat_loop(peer, conn)
+                self.chat_manager.add_connection(peer_id, conn)
+                self.chat_loop(peer, conn)
+            finally:
+                self.chat_manager.select_chat_peer(None)
+                self.chat_manager.remove_connection(peer_id)
+                client.close(conn)
 
     def chat_loop(self, peer, conn):
         client = ChatClient(peer["peer_id"], peer["ip"], peer["tcp_port"])
@@ -318,7 +289,6 @@ class ChatUI:
             
             if message in ("/back", "/exit"):
                 print("Exiting chat...")
-                self.chat_manager.current_chat_peer = None
                 return
 
             if not message:
@@ -333,19 +303,15 @@ class ChatUI:
             success = client.send_message(conn, chat_message)
 
             if not success:
-                self.display_error(message)
-
-                self.chat_manager.current_chat_peer = None
+                self.display_error("Could not send the message.")
                 return
+            self.chat_manager.add_message(peer["peer_id"], chat_message)
 
     def start(self):
 
         while True:
 
-            # Display main menu
-            self.display_main_menu()
-
-            choice = input("\nSelect option: ").strip()
+            choice = self.display_main_menu()
 
             # 1. View online peers
             if choice == "1":
@@ -359,12 +325,14 @@ class ChatUI:
                     self.chat_manager.get_unread_count()
                 )
 
-            # 3. Chat with a peer
+            # 3. Change status
             elif choice == "3":
 
-                self.change_status()
+                status = self.change_status()
+                if status is not None and self.set_status is not None:
+                    self.set_status(status)
 
-            # 4. Change status
+            # 4. Chat with a peer
             elif choice == "4":
 
                 self.start_chat()
