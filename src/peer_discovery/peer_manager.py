@@ -9,23 +9,42 @@ class PeerManager:
     thông qua giao thức UDP presence discovery.
     """
 
-    def __init__(self, self_peer_id: str):
+    def __init__(self, self_peer_id: str, username: str):
         """
         Khởi tạo trình quản lý peer.
 
         :param self_peer_id: ID duy nhất của chính máy đang chạy chương trình.
         """
         self.self_peer_id = str(self_peer_id)
+        self.username = username
+        self.status = "online"
+
         self.peers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
-    def init(self, self_peer_id: str) -> None:
+    def init(self, self_peer_id: str, username: str) -> None:
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """
         with self._lock:
             self.self_peer_id = str(self_peer_id)
+            self.username = username
+            self.status = "online"
             self.peers = {}
+
+    def set_user_name(self, new_username: str):
+        self.username = new_username
+
+    def set_status(self, status: str) -> bool:
+        valid_status = ("online", "away", "offline")
+
+        if status not in valid_status:
+            return False
+
+        with self._lock:
+            self.status = status
+
+        return True
 
     def update_peer(self, message: dict, source_ip: str) -> bool:
         """

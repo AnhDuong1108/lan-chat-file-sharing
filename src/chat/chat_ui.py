@@ -142,7 +142,12 @@ class ChatUI:
         print("\n========== UNREAD MESSAGES ==========")
 
         for peer_id, count in unread_data.items():
-            peer_name = self.peer_manager.get_peer(peer_id).get("username", peer_id)
+            peer = self.peer_manager.get_peer(peer_id)
+
+            peer_name = (
+                peer.get("username", peer_id)
+                if peer else peer_id
+            )
 
             print(f"{peer_name}: {count}")
 
@@ -166,7 +171,12 @@ class ChatUI:
 
 
         sender_id = message["sender_id"]
-        sender_name = self.peer_manager.get_peer(sender_id).get("username", sender_id)
+        peer = self.peer_manager.get_peer(sender_id)
+        sender_name = (
+                peer.get("username", sender_id)
+                if peer is not None
+                else sender_id
+            )
         timestamp = message["timestamp"]
 
         # Lưu thời điểm hiển thị tin nhắn gần nhất

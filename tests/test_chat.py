@@ -11,14 +11,14 @@ SRC_DIR = str(Path(__file__).resolve().parents[1] / "src")
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from chat.chat_client import ChatClient
-from chat.chat_manager import ChatManager
-from chat.chat_message import create_chat_message
-from chat.chat_server import ChatServer
-from chat.chat_ui import ChatUI
-from common.message import encode_message
-from config import CONNECT_TIMEOUT
-from peer_discovery.peer_manager import PeerManager
+from chat.chat_client import ChatClient # noqa: E402
+from chat.chat_manager import ChatManager # noqa: E402
+from chat.chat_message import create_chat_message # noqa: E402
+from chat.chat_server import ChatServer # noqa: E402
+from chat.chat_ui import ChatUI # noqa: E402
+from common.message import encode_message # noqa: E402
+from config import CONNECT_TIMEOUT # noqa: E402
+from peer_discovery.peer_manager import PeerManager # noqa: E402
 
 
 LOOPBACK = "127.0.0.1"

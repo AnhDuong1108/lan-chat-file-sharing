@@ -21,13 +21,14 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
 
-from chat.chat_manager import ChatManager
-from chat.chat_server import ChatServer
-from chat.chat_ui import ChatUI
-from config import BROADCAST_INTERVAL, CHAT_PORT, DISCOVERY_PORT
-from peer_discovery.broadcast import PresenceBroadcaster, start_broadcast
-from peer_discovery.listen import PresenceListener, start_listener
-from peer_discovery.peer_manager import PeerManager
+from peer_discovery.peer_manager import PeerManager # noqa: E402
+from chat.chat_manager import ChatManager # noqa: E402
+from chat.chat_server import ChatServer # noqa: E402
+from chat.chat_ui import ChatUI # noqa: E402
+from config import BROADCAST_INTERVAL, CHAT_PORT, DISCOVERY_PORT # noqa: E402
+from peer_discovery.broadcast import PresenceBroadcaster, start_broadcast # noqa: E402
+from peer_discovery.listen import PresenceListener, start_listener # noqa: E402
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -189,7 +190,7 @@ def main(args: Optional[List[str]] = None) -> int:
     print(f"[*] Username       : {username}")
     print(f"[*] TCP Port       : {tcp_port}")
     print(f"[*] UDP Discovery  : Port {DISCOVERY_PORT}")
-    print(f"[*] Nhấn Ctrl+C để dừng chương trình an toàn.")
+    print("[*] Nhấn Ctrl+C để dừng chương trình an toàn.")
     print("=" * 80)
 
     broadcaster = None
