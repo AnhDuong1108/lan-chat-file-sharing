@@ -1,4 +1,8 @@
 """ Màn hình hiển thị trên terminal """
+"""
+Lỗi hiện tại:
+1. không cập nhật được status
+"""
 from datetime import datetime
 import os
 import queue
@@ -7,6 +11,7 @@ import threading
 from chat.chat_client import ChatClient
 from chat.chat_manager import ChatManager
 from chat.chat_message import create_chat_message, validate_chat_message
+from peer_discovery.broadcast import PresenceBroadcaster
 from peer_discovery.peer_manager import PeerManager
 from file_transfer.file_manager import FileManager
 from typing import Dict, Optional
@@ -18,6 +23,9 @@ from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit import print_formatted_text
 
+import logging
+logger = logging.getLogger(__name__)
+
 class ChatUI:
     def __init__(self, peer_manager: PeerManager, chat_manager: ChatManager, set_status=None):
 
@@ -27,6 +35,7 @@ class ChatUI:
         self.end = False
         self.leave = False
 
+        #In màu
         self.style = Style.from_dict({
             "prompt": "#00ff87 bold",
             "command": "#00afff bold",
@@ -48,6 +57,10 @@ class ChatUI:
         self.file_dir = os.path.abspath("docs")
 
         self.file_manager: Optional[FileManager] = None
+        self.presence_broadcaster = PresenceBroadcaster(
+            self.peer_manager.self_peer_id, 
+            self.peer_manager.username,
+            self.peer_manager.tcp_port)
 
         # Current chat peer
         self.peer_current = {}
@@ -316,15 +329,16 @@ class ChatUI:
     # ==========================================
 
     def change_status(self, status: str) -> bool:
-        if not self.peer_manager.set_status(status):
-            return False
 
         try:
             self.presence_broadcaster.set_status(status)
-        except RuntimeError:
-            return False
+            self.peer_manager.set_status(status)
 
-        return True
+            return True
+
+        except (RuntimeError, ValueError) as e:
+            logger.error("Could not change status: %s", e)
+            return False
 
     # ==========================================
     # START CHAT UI
@@ -832,7 +846,7 @@ class ChatUI:
                     else: 
                         self.start_chat(args)
                     
-                    if self.end == True or self.leave == False:
+                    if self.end == True or self.leave == True:
                         break
 
                     args = input()

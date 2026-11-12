@@ -68,7 +68,7 @@ def init_discovery(
     :return: (peer_manager, broadcaster, listener)
     """
     logger.info("Initializing PeerManager (peer_id: %s)...", peer_id)
-    peer_manager = PeerManager(peer_id, username)
+    peer_manager = PeerManager(peer_id, username, tcp_port)
 
     logger.info("Starting UDP PresenceListener on port %d...", DISCOVERY_PORT)
     listener = start_listener(peer_manager)

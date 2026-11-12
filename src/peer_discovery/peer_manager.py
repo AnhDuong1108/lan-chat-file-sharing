@@ -9,7 +9,7 @@ class PeerManager:
     thông qua giao thức UDP presence discovery.
     """
 
-    def __init__(self, self_peer_id: str, username: str):
+    def __init__(self, self_peer_id: str, username: str, tcp_port: int):
         """
         Khởi tạo trình quản lý peer.
 
@@ -18,17 +18,19 @@ class PeerManager:
         self.self_peer_id = str(self_peer_id)
         self.username = username
         self.status = "online"
+        self.tcp_port = tcp_port
 
         self.peers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
-    def init(self, self_peer_id: str, username: str) -> None:
+    def init(self, self_peer_id: str, username: str, tcp_port: int) -> None:
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """
         with self._lock:
             self.self_peer_id = str(self_peer_id)
             self.username = username
+            self.tcp_port = tcp_port
             self.status = "online"
             self.peers = {}
 
@@ -36,7 +38,7 @@ class PeerManager:
         self.username = new_username
 
     def set_status(self, status: str) -> bool:
-        valid_status = ("online", "away", "offline")
+        valid_status = ("online", "away")
 
         if status not in valid_status:
             return False
