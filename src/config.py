@@ -11,9 +11,9 @@ BROADCAST_ADDRESS = "255.255.255.255"
 
 # ===== TCP Communication =====
 ## Port TCP dùng để nhận kết nối chat
-CHAT_PORT = 5000
+CHAT_PORT = 2712
 ## Port TCP dùng để nhận kết nối truyền file
-FILE_PORT = 5001
+FILE_PORT = 4849
 ## Thời gian chờ kết nối TCP, tính bằng giây
 CONNECT_TIMEOUT = 5
 
@@ -26,4 +26,17 @@ MAX_FILE_SIZE = 100 * 1024 * 1024
 ## Là tên thư mục dùng để lưu các file được tải về.
 DOWNLOAD_DIR = "downloads"
 
-# ===== Message Configuration =====
+# ===== File Port =====
+
+FILE_TRANSFER_PORT = 8386
+
+BUFFER_SIZE = 4096
+CHUNK_SIZE = 4096
+
+DOWNLOAD_DIR = "downloads"
+
+# ===== File Size =====
+MAX_FILE_SIZE = 100 * 1024 * 1024
+
+# ===== File timeout =====
+FILE_REQUEST_TIMEOUT = 30
