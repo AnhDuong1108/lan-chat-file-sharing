@@ -26,7 +26,7 @@ def create_broadcast_socket():
 
 
 def broadcast_presence(sock, peer_id, username, tcp_port, status):
-    message = create_presence_message(peer_id, username, tcp_port)
+    message = create_presence_message(peer_id, username, tcp_port, status)
     message["status"] = status
     if not validate_presence_message(message):
         raise ValueError("Invalid presence message")
@@ -36,13 +36,13 @@ def broadcast_presence(sock, peer_id, username, tcp_port, status):
 class PresenceBroadcaster:
 
     def __init__(self, peer_id, username, tcp_port):
-        message = create_presence_message(peer_id, username, tcp_port)
+        self._status = "online"
+        message = create_presence_message(peer_id, username, tcp_port, self._status)
         if not validate_presence_message(message):
             raise ValueError("Invalid peer identity")
         self.peer_id = peer_id
         self.username = username
         self.tcp_port = tcp_port
-        self._status = "online"
         self._condition = threading.Condition()
         self._stopping = False
         self._socket = create_broadcast_socket()

@@ -11,7 +11,7 @@ import threading
 from chat.chat_client import ChatClient
 from chat.chat_manager import ChatManager
 from chat.chat_message import create_chat_message, validate_chat_message
-from peer_discovery.broadcast import PresenceBroadcaster
+from peer_discovery.broadcast import PresenceBroadcaster, broadcast_presence
 from peer_discovery.peer_manager import PeerManager
 from file_transfer.file_manager import FileManager
 from typing import Dict, Optional
@@ -39,7 +39,7 @@ class ChatUI:
         self.style = Style.from_dict({
             "prompt": "#00ff87 bold",
             "command": "#00afff bold",
-            "success": "#00ff87",
+            "success": "#00ffb7",
             "error": "#ff5f5f bold",
             "warning": "#ffaf00",
             "system": "#888888",
@@ -61,6 +61,7 @@ class ChatUI:
             self.peer_manager.self_peer_id, 
             self.peer_manager.username,
             self.peer_manager.tcp_port)
+        self.presence_broadcaster._thread.start()
 
         # Current chat peer
         self.peer_current = {}
@@ -111,7 +112,7 @@ class ChatUI:
 
     def display_online_peers(self):
 
-        peers = self.peer_manager.get_online_peers()
+        peers = self.peer_manager.get_online_peers() + self.peer_manager.get_away_peers()
         list_peer = []
 
         print("\n========== ONLINE PEERS ==========")
@@ -331,9 +332,20 @@ class ChatUI:
     def change_status(self, status: str) -> bool:
 
         try:
-            self.presence_broadcaster.set_status(status)
-            self.peer_manager.set_status(status)
+            print("PeerManager ID:", id(self.peer_manager))
+            print("Status before:", self.peer_manager.status)
 
+            result = self.peer_manager.set_status(status)
+
+            print("Status after:", self.peer_manager.status)  
+            
+             #    if not self.peer_manager.set_status(status):  
+         #       return False
+            
+            broadcast_presence(self.presence_broadcaster._socket,
+                               self.peer_manager.self_peer_id, self.peer_manager.username,
+                               self.peer_manager.tcp_port, status)
+            
             return True
 
         except (RuntimeError, ValueError) as e:
@@ -434,7 +446,8 @@ class ChatUI:
                     self.display_error(
                         f"Unknown message type: {message_type}"
                     )
-
+                    
+                print(f"[DEBUG] Received presence: {message}")
             finally:
                 self.incoming_message_queue.task_done()
 
@@ -836,7 +849,7 @@ class ChatUI:
 
                 while True:     
                     username = self.get_username(args, list_peer)
-                    if args == "/quit":
+                    if args == "/quit" or args == '/leave':
                         self.end = True
                         break
                    

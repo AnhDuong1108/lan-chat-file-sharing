@@ -24,6 +24,7 @@ class PeerManager:
         self._lock = threading.RLock()
 
     def init(self, self_peer_id: str, username: str, tcp_port: int) -> None:
+        print("[DEBUG] PeerManager.init() called")
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """
@@ -38,13 +39,22 @@ class PeerManager:
         self.username = new_username
 
     def set_status(self, status: str) -> bool:
-        valid_status = ("online", "away")
+        """
+        Cập nhật trạng thái của chính mình.
 
-        if status not in valid_status:
+        :param status: online, away hoặc offline.
+        :return: True nếu cập nhật thành công.
+        """
+        valid_statuses = {"online", "away"}
+
+        if status not in valid_statuses:
             return False
 
         with self._lock:
+            print("SET_STATUS ID:", id(self))
+            print("Old status:", self.status)
             self.status = status
+            print("New status:", self.status)
 
         return True
 
@@ -94,7 +104,6 @@ class PeerManager:
 
         with self._lock:
             self.peers[peer_id] = peer_data
-
         return True
 
     def get_peer(self, peer_id: str) -> Optional[Dict[str, Any]]:
