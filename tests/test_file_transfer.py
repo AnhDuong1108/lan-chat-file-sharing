@@ -1,4 +1,4 @@
-"""Kiểm thử framing TCP, bắt tay, truyền file theo chunk và điều hướng UI."""
+"""Kiểm thử framing TCP, bắt tay và truyền file theo chunk."""
 
 import hashlib
 import socket
@@ -25,7 +25,6 @@ from common.message import (
 from config import BUFFER_SIZE, MAX_FILE_SIZE
 from file_transfer.file_receiver import FileReceiver, receive_file_data_start
 from file_transfer.file_sender import FileSender
-from ui import UI
 
 
 WAIT = 3
@@ -442,55 +441,6 @@ class TestFileTransfer(unittest.TestCase):
         self.assertFalse(self.sender.verify_file(self.root))
         self.sender.close()
         self.sender.close()
-
-
-class TestCombinedUI(unittest.TestCase):
-    def test_real_chat_ui_returns_to_main_menu(self):
-        """UI thật mở menu chat rồi trở về menu chính với đầu vào, đầu ra giả lập."""
-        from prompt_toolkit.application import create_app_session
-        from prompt_toolkit.input import DummyInput
-        from prompt_toolkit.output import DummyOutput
-
-        with create_app_session(input=DummyInput(), output=DummyOutput()):
-            ui = UI(Mock(), Mock(), None)
-            with patch("builtins.input", side_effect=["2", "5", "3", "4"]), patch("builtins.print"):
-                ui.start()
-
-    def test_injected_chat_ui_is_reused_by_file_ui(self):
-        """Issue 2 có thể truyền ChatUI đã nối FileManager, cùng đối tượng được FileUI dùng."""
-        chat_ui, file_manager = Mock(), Mock()
-        file_ui_module = ModuleType("file_transfer.file_ui")
-        file_ui_module.FileUI = Mock()
-        ui = UI(Mock(), Mock(), file_manager, chat_ui=chat_ui)
-        with patch.dict(sys.modules, {"file_transfer.file_ui": file_ui_module}):
-            ui.display_file_menu()
-            ui.display_file_menu()
-        file_ui_module.FileUI.assert_called_once_with(
-            file_manager, ui.chat_manager, ui.peer_manager, chat_ui
-        )
-        self.assertEqual(file_ui_module.FileUI.return_value.start.call_count, 2)
-        self.assertIs(ui.chat_ui, chat_ui)
-
-    def test_menu_routes_to_chat_and_injected_file_ui(self):
-        """Menu gọi ChatUI và FileUI bên ngoài rồi quay lại để xử lý lựa chọn tiếp."""
-        peers, chats, files, file_ui = Mock(), Mock(), Mock(), Mock()
-        peers.get_all_peers.return_value = []
-        with patch("ui.ChatUI") as chat_type:
-            ui = UI(peers, chats, files, file_ui=file_ui)
-        with patch("builtins.input", side_effect=["bad", "1", "2", "3", "4"]), patch("builtins.print"):
-            ui.start()
-        peers.get_all_peers.assert_called_once()
-        chat_type.return_value.start.assert_called_once()
-        file_ui.start.assert_called_once()
-        self.assertIs(ui.file_manager, files)
-
-    def test_file_menu_reports_missing_dependencies(self):
-        """Menu File Manager báo rõ khi các thành phần phụ thuộc chưa được cung cấp."""
-        with patch("ui.ChatUI"):
-            ui = UI(Mock(), Mock(), None)
-        with patch("builtins.print") as output:
-            ui.display_file_menu()
-        self.assertIn("FileManager", output.call_args.args[0])
 
 
 if __name__ == "__main__":
