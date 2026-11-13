@@ -24,7 +24,7 @@ class PeerManager:
         self._lock = threading.RLock()
 
     def init(self, self_peer_id: str, username: str, tcp_port: int) -> None:
-        print("[DEBUG] PeerManager.init() called")
+      #  print("[DEBUG] PeerManager.init() called")
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """
@@ -51,10 +51,10 @@ class PeerManager:
             return False
 
         with self._lock:
-            print("SET_STATUS ID:", id(self))
-            print("Old status:", self.status)
+      #      print("SET_STATUS ID:", id(self))
+      #      print("Old status:", self.status)
             self.status = status
-            print("New status:", self.status)
+      #      print("New status:", self.status)
 
         return True
 

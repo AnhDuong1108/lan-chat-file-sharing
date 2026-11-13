@@ -39,7 +39,7 @@ class ChatUI:
         self.style = Style.from_dict({
             "prompt": "#00ff87 bold",
             "command": "#00afff bold",
-            "success": "#00ffb7",
+            "success": "#00ff91fd",
             "error": "#ff5f5f bold",
             "warning": "#ffaf00",
             "system": "#888888",
@@ -321,10 +321,6 @@ class ChatUI:
         self.chat_manager.handle_incoming_message(message)
 
         self.display_incoming_message(message)
-
-    def refresh_chat_history(self):
-        pass
-
     # ==========================================
     # CHANGE STATUS
     # ==========================================
@@ -332,15 +328,15 @@ class ChatUI:
     def change_status(self, status: str) -> bool:
 
         try:
-            print("PeerManager ID:", id(self.peer_manager))
-            print("Status before:", self.peer_manager.status)
+            #print("PeerManager ID:", id(self.peer_manager))
+            #print("Status before:", self.peer_manager.status)
 
-            result = self.peer_manager.set_status(status)
+            #result = self.peer_manager.set_status(status)
 
-            print("Status after:", self.peer_manager.status)  
+            #print("Status after:", self.peer_manager.status)  
             
-             #    if not self.peer_manager.set_status(status):  
-         #       return False
+            if not self.peer_manager.set_status(status):  
+               return False
             
             broadcast_presence(self.presence_broadcaster._socket,
                                self.peer_manager.self_peer_id, self.peer_manager.username,
