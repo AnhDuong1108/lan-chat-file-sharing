@@ -1,4 +1,8 @@
 import json
+import socket
+import struct
+
+MAX_METADATA_SIZE = 64 * 1024
 
 def encode_message(message: dict) -> bytes:
     """Chuyển dictionary thành JSON UTF-8 bytes."""
@@ -60,3 +64,80 @@ def decode_message(data: bytes) -> dict:
         )
 
     return message
+
+
+def _close_connection(conn):
+    """Đóng kết nối lỗi để dữ liệu dở dang không bị đọc thành frame mới."""
+    try:
+        conn.shutdown(socket.SHUT_RDWR)
+    except OSError:
+        pass
+    conn.close()
+
+
+def recv_exact(conn: socket.socket, size: int) -> bytes | None:
+    """
+    Nhận đúng số byte yêu cầu, kể cả khi TCP chia dữ liệu thành nhiều lần nhận.
+
+    :param conn: Socket TCP đang kết nối.
+    :param size: Số byte không âm cần đọc. Giá trị 0 trả về bytes rỗng.
+    :return: Dữ liệu đủ kích thước hoặc None khi mất kết nối, lỗi hay timeout.
+    :raises ValueError: Nếu size không phải số nguyên không âm.
+    """
+    if type(size) is not int or size < 0:
+        raise ValueError("Size must be a non-negative integer")
+    data = bytearray()
+    try:
+        while len(data) < size:
+            chunk = conn.recv(min(4096, size - len(data)))
+            if not chunk:
+                _close_connection(conn)
+                return None
+            data.extend(chunk)
+    except OSError:
+        _close_connection(conn)
+        return None
+    return bytes(data)
+
+
+def send_framed_message(conn: socket.socket, message: dict) -> bool:
+    """
+    Gửi JSON UTF-8 với header độ dài 4 byte theo thứ tự byte mạng.
+
+    :return: True nếu gửi đủ frame, False nếu JSON quá lớn, sai hoặc socket lỗi.
+    """
+    try:
+        data = encode_message(message)
+    except (TypeError, ValueError, RecursionError):
+        return False
+    if not 0 < len(data) <= MAX_METADATA_SIZE:
+        return False
+    try:
+        conn.sendall(struct.pack("!I", len(data)) + data)
+    except OSError:
+        _close_connection(conn)
+        return False
+    return True
+
+
+def receive_framed_message(conn: socket.socket) -> dict | None:
+    """
+    Nhận một frame JSON tối đa MAX_METADATA_SIZE byte, giữ nguyên byte phía sau.
+
+    :return: Dictionary hoặc None nếu frame sai hay kết nối bị gián đoạn.
+    """
+    header = recv_exact(conn, 4)
+    if header is None:
+        return None
+    size = struct.unpack("!I", header)[0]
+    if not 0 < size <= MAX_METADATA_SIZE:
+        _close_connection(conn)
+        return None
+    data = recv_exact(conn, size)
+    if data is None:
+        return None
+    try:
+        return decode_message(data)
+    except (TypeError, ValueError, RecursionError):
+        _close_connection(conn)
+        return None

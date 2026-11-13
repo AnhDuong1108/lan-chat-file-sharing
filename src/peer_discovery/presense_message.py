@@ -1,4 +1,4 @@
-def create_presence_message(peer_id: str, username: str, tcp_port: int) -> dict:
+def create_presence_message(peer_id: str, username: str, tcp_port: int, status: str) -> dict:
     """Tạo dictionary chứa thông tin presence."""
 
     return {
@@ -6,7 +6,7 @@ def create_presence_message(peer_id: str, username: str, tcp_port: int) -> dict:
         "peer_id": peer_id,
         "username": username,
         "tcp_port": tcp_port,
-        "status": "online"
+        "status": status
     }
 
 def validate_presence_message(message: dict) -> bool:

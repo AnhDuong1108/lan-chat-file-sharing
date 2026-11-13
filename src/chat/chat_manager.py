@@ -164,3 +164,45 @@ class ChatManager:
             if p_id not in self.conversations:
                 self.conversations[p_id] = []
             self.conversations[p_id].append(message)
+
+
+    #======================================================
+    #       Gửi notification gửi/ nhận file 
+    #======================================================
+
+    def send_file_request(
+        self,
+        peer_id: str,
+        file_request: dict
+    ) -> bool:
+        """Gửi file_notification_request (file_request + trạng thái pending) thông báo muốn gửi file qua Chat TCP. Lưu notification vào queue"""
+        pass
+
+    def send_file_response(
+            self,
+            peer_id: str,
+            file_notification: dict
+        ) -> bool:
+        """Gửi fil_notificatione_response (cập nhật lại trạng thái) thông báo có nhận file hay không qua Chat TCP. Lưu notification vào queue"""
+        pass
+
+    def receive_file_notification(self, conn, transfer_id: str, notification_type: str) -> dict:
+        """Nhận message có chọn lọc qua Chat TCP""" 
+        pass
+
+    def handle_file_notification(self, notification: dict) -> bool:
+        """Phân loại và chuyển tiếp thông báo file lên UI"""
+        pass
+
+    def update_status_respone(transfer_id: str, status: str):
+        """Đổi trạng thái của file_notification_respone khi user nhập"""
+        pass
+
+    def update_status_request(transfer_id: str):
+        """Cập nhật file_notification_request status theo respone tương ứng mà receive_file_notification() nhận được qua TCP"""
+
+    def get_file_notifications(self, peer_id: str) -> list:
+        pass
+
+    def get_pending_file_notifications(self) -> list:
+        pass

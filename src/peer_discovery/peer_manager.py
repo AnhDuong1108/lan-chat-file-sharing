@@ -9,23 +9,54 @@ class PeerManager:
     thông qua giao thức UDP presence discovery.
     """
 
-    def __init__(self, self_peer_id: str):
+    def __init__(self, self_peer_id: str, username: str, tcp_port: int):
         """
         Khởi tạo trình quản lý peer.
 
         :param self_peer_id: ID duy nhất của chính máy đang chạy chương trình.
         """
         self.self_peer_id = str(self_peer_id)
+        self.username = username
+        self.status = "online"
+        self.tcp_port = tcp_port
+
         self.peers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
-    def init(self, self_peer_id: str) -> None:
+    def init(self, self_peer_id: str, username: str, tcp_port: int) -> None:
+      #  print("[DEBUG] PeerManager.init() called")
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """
         with self._lock:
             self.self_peer_id = str(self_peer_id)
+            self.username = username
+            self.tcp_port = tcp_port
+            self.status = "online"
             self.peers = {}
+
+    def set_user_name(self, new_username: str):
+        self.username = new_username
+
+    def set_status(self, status: str) -> bool:
+        """
+        Cập nhật trạng thái của chính mình.
+
+        :param status: online, away hoặc offline.
+        :return: True nếu cập nhật thành công.
+        """
+        valid_statuses = {"online", "away"}
+
+        if status not in valid_statuses:
+            return False
+
+        with self._lock:
+      #      print("SET_STATUS ID:", id(self))
+      #      print("Old status:", self.status)
+            self.status = status
+      #      print("New status:", self.status)
+
+        return True
 
     def update_peer(self, message: dict, source_ip: str) -> bool:
         """
@@ -73,7 +104,6 @@ class PeerManager:
 
         with self._lock:
             self.peers[peer_id] = peer_data
-
         return True
 
     def get_peer(self, peer_id: str) -> Optional[Dict[str, Any]]:

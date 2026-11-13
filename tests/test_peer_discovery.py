@@ -15,8 +15,8 @@ SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from peer_discovery.peer_manager import PeerManager
-from peer_discovery.presense_message import create_presence_message, validate_presence_message
+from peer_discovery.peer_manager import PeerManager # noqa: E402
+from peer_discovery.presense_message import create_presence_message
 from peer_discovery.listen import process_received_message
 from common.message import encode_message
 import main

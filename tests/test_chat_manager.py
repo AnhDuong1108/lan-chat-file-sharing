@@ -9,8 +9,8 @@ SRC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from chat.chat_manager import ChatManager
-from peer_discovery.peer_manager import PeerManager
+from chat.chat_manager import ChatManager # noqa: E402
+from peer_discovery.peer_manager import PeerManager # noqa: E402
 
 
 class TestChatManager(unittest.TestCase):

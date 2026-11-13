@@ -8,6 +8,10 @@ import time
 import uuid
 from typing import List, Optional, Tuple
 
+# peer 1: python src/main.py --peer-id A001 --username Alice --port 5001
+# peer 2: python src/main.py --peer-id B001 --username Bob --port 5005
+# peer 3: python src/main.py --peer-id C001 --username Cin --port 5009
+
 # Cấu hình UTF-8 cho Windows console nếu cần
 if sys.platform == "win32":
     try:
@@ -64,7 +68,7 @@ def init_discovery(
     :return: (peer_manager, broadcaster, listener)
     """
     logger.info("Initializing PeerManager (peer_id: %s)...", peer_id)
-    peer_manager = PeerManager(peer_id)
+    peer_manager = PeerManager(peer_id, username, tcp_port)
 
     logger.info("Starting UDP PresenceListener on port %d...", DISCOVERY_PORT)
     listener = start_listener(peer_manager)
