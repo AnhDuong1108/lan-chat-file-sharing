@@ -8,6 +8,8 @@ import time
 import uuid
 from typing import List, Optional, Tuple
 import threading
+from common.logger import setup_logging
+import logging
 
 # peer 1: python src/main.py --peer-id A001 --username Alice --port 5001
 # peer 2: python src/main.py --peer-id B001 --username Bob --port 5005
@@ -188,6 +190,8 @@ def main(args: Optional[List[str]] = None) -> int:
         help="Chạy chế độ thử peer discovery trong số giây đã cho rồi tự dừng",
     )
 
+    log_listener = setup_logging()
+
     parsed_args = parser.parse_args(args)
 
     peer_id = parsed_args.peer_id
@@ -225,6 +229,8 @@ def main(args: Optional[List[str]] = None) -> int:
         running = False
 
     try:
+        logger.info("Starting LAN Chat & File Sharing...")
+
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
                 previous_handlers[sig] = signal.signal(sig, signal_handler)
@@ -281,6 +287,7 @@ def main(args: Optional[List[str]] = None) -> int:
             time.sleep(interval)
 
     except (KeyboardInterrupt, EOFError):
+        logger.info("Application interrupted")
         pass
     except Exception as exc:
         logger.exception("An error occurred during execution: %s", exc)
@@ -298,6 +305,9 @@ def main(args: Optional[List[str]] = None) -> int:
         for sig, previous_handler in previous_handlers.items():
             signal.signal(sig, previous_handler)
         print("\n[+] Đã đóng ứng dụng an toàn. Tạm biệt!")
+
+        log_listener.stop()
+
 
     return 0
 

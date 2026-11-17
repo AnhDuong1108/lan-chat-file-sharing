@@ -26,6 +26,7 @@ from prompt_toolkit import print_formatted_text
 
 import logging
 logger = logging.getLogger(__name__)
+logging.getLogger("file_transfer").setLevel(logging.WARNING)
 
 class ChatUI:
     def __init__(self, peer_manager: PeerManager, chat_manager: ChatManager, set_status=None):
@@ -308,9 +309,9 @@ class ChatUI:
                 sender_id = message.get("sender_id", "Unknown")
                 filename = message.get("filename") or message.get("file_name", "Unknown")
                 self.print_styled(
-                    ("class:warning", f"\n[*] Yêu cầu nhận file từ {sender_id}: {filename}\n"),
-                    ("class:command", "    (Gõ /file để kiểm tra hoặc xem trong menu File Manager)\n")
-                )
+                ("class:warning", f"\n[*] File reception request from {sender_id}: {filename}\n"),
+                ("class:command", "    (Type /file in the chat app or open the File Manager menu to check)\n")
+            )
             return
 
         if not validate_chat_message(message):
@@ -750,13 +751,13 @@ class ChatUI:
                 self.file_manager.accept_file(transfer_id)
 
                 self.display_success(
-                    f"Đã chấp nhận file: {filename}"
+                    f"Accepted file: {filename}"
                 )
 
             else:
                 self.file_manager.reject_file(transfer_id)
 
-                print(f"Đã từ chối nhận file: {filename}")
+                print(f"Rejected file: {filename}")
 
             self.file_manager.file_request_queue.task_done()
 
@@ -854,19 +855,27 @@ class ChatUI:
         choice = self.get_user_input().strip().lower()
 
         if choice in ("y", "yes"):
-            success = self.file_transfer(file_path, peer)
-
-            if success:
-                self.display_success(
-                    f"File transfer request sent: {filename}"
-                )
+            self.file_transfer(file_path, peer)
             
         else:
             self.display_error("File transfer cancelled.")
 
     #Khởi động
 
+    def display_help_menu(self):
+        print("\n==================== CHAT MENU ====================")
+        print("/list                - Show online users with number, name, IP and status")
+        print("/chat <name|number>  - Open a chat with the selected user (TCP connection)")
+        print("<any text>           - Send a message to the current chat partner")
+        print("/send <file>         - Send a file to the current chat partner")
+        print("/leave               - Close the current chat")
+        print("/status <online|away> - Change your status (sent via UDP)")
+        print("/help                - Show all commands")
+        print("/quit                - Exit the program")
+        print("====================================================")
+
     def start(self):
+        self.display_help_menu()
 
         self.end = False
 
@@ -881,16 +890,7 @@ class ChatUI:
 
             # 2. help command
             elif choice == "/help":
-                print("""
-                    /list : Show online users with number, name, IP and status
-                    /chat <name|number> : Open a chat with the selected user (TCP connection) 
-                    <any text> : Send a message to the current chat partner 
-                    /send <file> : Send a file to the current chat partner 
-                    /leave : Close the current chat 
-                    /status <online|away>: Change your status (sent via UDP) 
-                    /help : Show all commands
-                    /quit : Exit the program 
-                    """)
+                self.display_help_menu()
 
             # 3. Change status
             elif match := re.match(r"^/status\s+(online|away)$", choice):

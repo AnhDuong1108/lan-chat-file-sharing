@@ -70,21 +70,21 @@ class FileUI:
             ("", message)
         )
 
-    def display_menu(self) -> str:
+    def display_help_menu(self):
         print("\n================= FILE MANAGER =================")
-        print("1. View and handle pending file reception requests")
-        print("2. Send a file to a device on the LAN")
-        print("3. View file transfer sessions and their progress")
-        print("4. Cancel an active file transfer session")
-        print("5. View available files in the docs/ directory")
-        print("6. Return to the main menu")
+        print("/requests    - View and handle pending file reception requests")
+        print("/send        - Send a file to a device on the LAN")
+        print("/sessions    - View file transfer sessions and their progress")
+        print("/cancel      - Cancel an active file transfer session")
+        print("/files       - View available files in the docs/ directory")
+        print("/quit        - Return to the main menu")
+        print("/help        - Show all commands")
         print("================================================")
-        return input("Choose option (1-6): ").strip()
 
     def process_pending_requests(self) -> None:
-        print("\n--- CÁC YÊU CẦU NHẬN FILE ĐANG CHỜ ---")
+        print("\n--- PENDING FILE RECEPTION REQUESTS ---")
         if self.file_manager.file_request_queue.empty():
-            print("Không có yêu cầu nhận file nào đang chờ.")
+            print("No pending file reception requests.")
             return
 
         while not self.file_manager.file_request_queue.empty():
@@ -129,21 +129,21 @@ class FileUI:
                     self.file_manager.file_request_queue.task_done()
 
     def send_file_to_peer(self) -> None:
-        print("\n--- GỬI FILE TỚI PEER ---")
+        print("\n--- SEND FILE TP PEER ---")
         peers = (
             self.peer_manager.get_online_peers()
             if self.peer_manager
             else []
         )
         if not peers:
-            print("Không có máy (peer) nào đang online trong mạng LAN.")
+            print("No devices (peers) are currently online on the LAN.")
             return
 
-        print("Danh sách máy online:")
+        print("Online devices:")
         for idx, p in enumerate(peers, start=1):
             print(f"{idx}. {p['username']} (ID: {p['peer_id']}, IP: {p['ip']})")
 
-        choice = input("Chọn số thứ tự peer hoặc Peer ID (Enter để quay lại): ").strip()
+        choice = input("Select a peer number or Peer ID (press Enter to go back): ").strip()
         if not choice:
             return
 
@@ -158,10 +158,10 @@ class FileUI:
                 break
 
         if not target_peer:
-            self.display_error("Không tìm thấy peer đã chọn.")
+            self.display_error("Selected peer not found.")
             return
 
-        file_input = input("Nhập tên file trong docs/ hoặc đường dẫn file: ").strip().strip('"').strip("'")
+        file_input = input("Enter the file name in docs/ or the file path: ").strip().strip('"').strip("'")
         if not file_input:
             return
 
@@ -176,50 +176,59 @@ class FileUI:
 
         try:
             tid = self.file_manager.send_file(target_peer["peer_id"], file_path)
-            self.display_success(f"Đã gửi yêu cầu truyền file '{os.path.basename(file_path)}' (ID: {tid}) tới {target_peer['username']}.")
-            print("    Đang chờ đối phương chấp nhận nhận file...")
+            self.display_success(
+                f"File transfer request for '{os.path.basename(file_path)}' (ID: {tid}) "
+                f"sent successfully to {target_peer['username']}."
+            )
+            print("    Waiting for the recipient to accept the file transfer...")
         except Exception as e:
-            self.display_error(f"Lỗi khi gửi file: {e}")
+            self.display_error(f"Error while sending file: {e}")
 
     def show_transfer_status(self) -> None:
-        print("\n--- TIẾN ĐỘ & TRẠNG THÁI TRUYỀN FILE ---")
+        print("\n--- FILE TRANSFER PROGRESS & STATUS ---")
         with self.file_manager.lock:
             active = list(self.file_manager.active_transfers)
             completed = list(self.file_manager.completed_transfers)
 
         if not active and not completed:
-            print("Chưa có phiên truyền file nào.")
+            print("No file transfer sessions found.")
             return
 
         if active:
-            print("\n[Đang hoạt động / Chờ xác nhận]:")
+            print("\n[Active / Awaiting Confirmation]:")
             for t in active:
-                direction = "Gửi đi" if t.get("direction") == "send" else "Nhận về"
+                direction = "Outgoing" if t.get("direction") == "send" else "Incoming"
                 status = t.get("status", "unknown")
                 progress = t.get("progress", 0.0)
-                print(f" - ID: {t.get('transfer_id')} | File: {t.get('filename')} | Chiều: {direction} | Trạng thái: {status} | Tiến độ: {progress:.1f}%")
+                print(
+                    f" - ID: {t.get('transfer_id')} | File: {t.get('filename')} | "
+                    f"Direction: {direction} | Status: {status} | Progress: {progress:.1f}%"
+                )
 
         if completed:
-            print("\n[Đã kết thúc]:")
+            print("\n[Completed]:")
             for t in completed:
-                direction = "Gửi đi" if t.get("direction") == "send" else "Nhận về"
+                direction = "Outgoing" if t.get("direction") == "send" else "Incoming"
                 status = t.get("status", "unknown")
                 progress = t.get("progress", 100.0)
                 print(f" - ID: {t.get('transfer_id')} | File: {t.get('filename')} | Chiều: {direction} | Trạng thái: {status} | Tiến độ: {progress:.1f}%")
 
     def cancel_active_transfer(self) -> None:
-        print("\n--- HỦY PHIÊN TRUYỀN FILE ---")
+        print("\n--- CANCEL FILE TRANSFER SESSION ---")
         with self.file_manager.lock:
             active = list(self.file_manager.active_transfers)
 
         if not active:
-            print("Không có phiên truyền file nào đang hoạt động để hủy.")
+            print("No active file transfer sessions available to cancel.")
             return
 
         for idx, t in enumerate(active, start=1):
-            print(f"{idx}. ID: {t.get('transfer_id')} | File: {t.get('filename')} | Trạng thái: {t.get('status')}")
+            print(
+                f"{idx}. ID: {t.get('transfer_id')} | "
+                f"File: {t.get('filename')} | Status: {t.get('status')}"
+            )
 
-        choice = input("Nhập số thứ tự hoặc Transfer ID cần hủy: ").strip()
+        choice = input("Enter the session number or Transfer ID to cancel: ").strip()
         target_id = None
         for idx, t in enumerate(active, start=1):
             if choice == str(idx) or choice == t.get("transfer_id"):
@@ -232,14 +241,14 @@ class FileUI:
             self.display_error("Không tìm thấy phiên truyền hợp lệ để hủy.")
 
     def list_docs_files(self) -> None:
-        print(f"\n--- LIST FILE IN docs/ ({self.docs_dir}) ---")
+        print(f"\n--- FILES IN docs/ ({self.docs_dir}) ---")
         files = [
             f
             for f in os.listdir(self.docs_dir)
             if os.path.isfile(os.path.join(self.docs_dir, f))
         ]
         if not files:
-            print("Thư mục docs/ đang trống. Bạn có thể thêm file vào đây để gửi nhanh.")
+            print(("The docs/ directory is empty. You can add files here for quick file sharing."))
             return
         for idx, f in enumerate(files, start=1):
             size = os.path.getsize(os.path.join(self.docs_dir, f))
@@ -275,19 +284,22 @@ class FileUI:
             print()
 
     def start(self) -> None:
+        self.display_help_menu()
         while True:
-            choice = self.display_menu()
-            if choice == "1":
+            choice = input()
+            if choice == "/requests":
                 self.process_pending_requests()
-            elif choice == "2":
+            elif choice == "/send":
                 self.send_file_to_peer()
-            elif choice == "3":
+            elif choice == "/sessions":
                 self.show_transfer_status()
-            elif choice == "4":
+            elif choice == "/cancel":
                 self.cancel_active_transfer()
-            elif choice == "5":
+            elif choice == "/files":
                 self.list_docs_files()
-            elif choice == "6":
+            elif choice == "/quit":
                 break
+            elif choice == "/help":
+                self.display_help_menu()
             else:
                 print("Invalid option")

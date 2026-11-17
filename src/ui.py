@@ -22,12 +22,14 @@ class UI:
         self.file_ui = file_ui
 
     def display_main_menu(self):
-        """Hiển thị menu tổng hợp và trả lựa chọn người dùng."""
+        """Display the main menu and prompt the user for a command."""
         print("\n========== LAN CHAT & FILE SHARING ==========")
-        print("1. Chat")
-        print("2. File Manager")
-        print("Exit command: /quit")
-        return input("Choose option: ").strip()
+        print("/chat          - Open Chat")
+        print("/files         - Open File Manager")
+        print("/quit          - Exit the program")
+        print("/help          - Show all commands")
+        print("==============================================")
+
 
     # phần này là /list trong chat
     def display_peer_menu(self):
@@ -59,14 +61,18 @@ class UI:
         self.file_ui.start()
 
     def start(self):
+        self.display_main_menu()
         """Lặp menu và điều hướng đến chức năng được chọn cho tới khi thoát."""
         while True:
-            choice = self.display_main_menu()
-            if choice == "1":
+            print("================ MAIN MENU ===============")
+            choice = input()
+            if choice == "/chat":
                 self.display_chat_menu()
-            elif choice == "2":
+            elif choice == "/files":
                 self.display_file_menu()
             elif choice == "/quit":
                 return
+            elif choice == "/help":
+                self.display_main_menu()
             else:
                 print("Invalid option. Please try again.")
