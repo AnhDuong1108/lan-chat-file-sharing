@@ -28,10 +28,13 @@ if CURRENT_DIR not in sys.path:
 from chat.chat_manager import ChatManager
 from chat.chat_server import ChatServer
 from chat.chat_ui import ChatUI
-from config import BROADCAST_INTERVAL, CHAT_PORT, DISCOVERY_PORT
+from config import BROADCAST_INTERVAL, CHAT_PORT, DISCOVERY_PORT, FILE_PORT
+from file_transfer.file_manager import FileManager
+from file_transfer.file_server import FileServer
 from peer_discovery.broadcast import PresenceBroadcaster, start_broadcast
 from peer_discovery.listen import PresenceListener, start_listener
 from peer_discovery.peer_manager import PeerManager
+from ui import UI
 
 logging.basicConfig(
     level=logging.INFO,
@@ -166,6 +169,12 @@ def main(args: Optional[List[str]] = None) -> int:
         help=f"Cổng TCP dùng cho chat (mặc định: {CHAT_PORT})",
     )
     parser.add_argument(
+        "--file-port",
+        type=int,
+        default=FILE_PORT,
+        help=f"Cổng TCP dùng cho file transfer (mặc định: {FILE_PORT})",
+    )
+    parser.add_argument(
         "--interval",
         type=float,
         default=float(BROADCAST_INTERVAL),
@@ -183,6 +192,7 @@ def main(args: Optional[List[str]] = None) -> int:
     peer_id = parsed_args.peer_id
     username = parsed_args.username
     tcp_port = parsed_args.port
+    file_port = parsed_args.file_port
     interval = max(0.5, parsed_args.interval)
     duration = parsed_args.duration
 
@@ -191,7 +201,8 @@ def main(args: Optional[List[str]] = None) -> int:
     print("=" * 80)
     print(f"[*] Self Peer ID   : {peer_id}")
     print(f"[*] Username       : {username}")
-    print(f"[*] TCP Port       : {tcp_port}")
+    print(f"[*] Chat TCP Port  : {tcp_port}")
+    print(f"[*] File TCP Port  : {file_port}")
     print(f"[*] UDP Discovery  : Port {DISCOVERY_PORT}")
     print(f"[*] Nhấn Ctrl+C để dừng chương trình an toàn.")
     print("=" * 80)
@@ -200,6 +211,8 @@ def main(args: Optional[List[str]] = None) -> int:
     listener = None
     chat_server = None
     chat_worker = None
+    file_server = None
+    file_worker = None
     running = True
     previous_handlers = {}
 
@@ -222,11 +235,38 @@ def main(args: Optional[List[str]] = None) -> int:
         )
 
         if duration is None:
+            # 1. Khởi tạo ChatManager và FileManager
             chat_manager = ChatManager(peer_id, peer_manager)
+            file_manager = FileManager(peer_manager, chat_manager, file_port=file_port)
+            chat_manager.set_file_manager(file_manager)
+
+            # 2. Khởi tạo ChatUI và liên kết FileManager
             chat_ui = ChatUI(peer_manager, chat_manager, broadcaster.set_status)
+            chat_ui.file_manager = file_manager
+
+            # 3. Khởi chạy Chat Server (TCP)
             chat_server = ChatServer(port=tcp_port, on_message=chat_ui.handle_incoming_message)
             chat_worker = chat_server.start(background=True)
-            chat_ui.start()
+
+            # 4. Khởi chạy File Server (TCP) trong thread riêng (Rule 7)
+            file_server = FileServer(port=file_port)
+            file_server.set_file_manager(file_manager)
+            file_worker = threading.Thread(
+                target=file_server.start_file_server,
+                name="file-server-thread",
+                daemon=True,
+            )
+            file_worker.start()
+
+            # 5. Khởi chạy giao diện tổng hợp UI
+            combined_ui = UI(
+                peer_manager=peer_manager,
+                chat_manager=chat_manager,
+                file_manager=file_manager,
+                chat_ui=chat_ui,
+                set_status=broadcaster.set_status,
+            )
+            combined_ui.start()
             return 0
 
         start_time = time.monotonic()
@@ -249,10 +289,14 @@ def main(args: Optional[List[str]] = None) -> int:
         if chat_server is not None:
             chat_server.stop()
         if chat_worker is not None:
-            chat_worker.join()
+            chat_worker.join(timeout=2)
+        if file_server is not None:
+            file_server.stop_file_server()
+        if file_worker is not None and file_worker.is_alive():
+            file_worker.join(timeout=2)
         for sig, previous_handler in previous_handlers.items():
             signal.signal(sig, previous_handler)
-        print("\n[+] Đã đóng ứng dụng. Tạm biệt!")
+        print("\n[+] Đã đóng ứng dụng an toàn. Tạm biệt!")
 
     return 0
 

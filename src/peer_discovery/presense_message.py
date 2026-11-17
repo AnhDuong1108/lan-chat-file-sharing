@@ -1,4 +1,4 @@
-def create_presence_message(peer_id: str, username: str, tcp_port: int, status: str) -> dict:
+def create_presence_message(peer_id: str, username: str, tcp_port: int, status: str = "online") -> dict:
     """Tạo dictionary chứa thông tin presence."""
 
     return {

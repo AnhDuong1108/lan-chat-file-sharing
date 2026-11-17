@@ -1,19 +1,13 @@
-import threading
-
-import socket
-import threading
-import logging
-from file_manager import FileManager
-from config import FILE_BUFFER_SIZE
-
-logger = logging.getLogger(__name__)
-
-
 import socket
 import threading
 import logging
 
-from config import FILE_HOST, FILE_PORT, BACKLOG
+try:
+    from file_transfer.file_manager import FileManager
+except ImportError:
+    from file_manager import FileManager
+
+from config import FILE_HOST, FILE_PORT, BACKLOG, FILE_BUFFER_SIZE
 
 logger = logging.getLogger(__name__)
 

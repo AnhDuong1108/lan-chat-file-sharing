@@ -3,6 +3,7 @@
 Lỗi hiện tại:
 1. không cập nhật được status
 """
+from contextlib import nullcontext
 from datetime import datetime
 import os
 import queue
@@ -47,8 +48,11 @@ class ChatUI:
             "timestamp": "#888888 italic",
         })
 
-        self.session = PromptSession(style=self.style,
-                                    erase_when_done=True)
+        try:
+            self.session = PromptSession(style=self.style,
+                                        erase_when_done=True)
+        except Exception:
+            self.session = None
 
         self.receive_thread = None
         self.incoming_message_queue = queue.Queue()
@@ -57,11 +61,15 @@ class ChatUI:
         self.file_dir = os.path.abspath("docs")
 
         self.file_manager: Optional[FileManager] = None
-        self.presence_broadcaster = PresenceBroadcaster(
-            self.peer_manager.self_peer_id, 
-            self.peer_manager.username,
-            self.peer_manager.tcp_port)
-        self.presence_broadcaster._thread.start()
+        try:
+            self.presence_broadcaster = PresenceBroadcaster(
+                str(getattr(self.peer_manager, "self_peer_id", "local")), 
+                str(getattr(self.peer_manager, "username", "User")),
+                int(getattr(self.peer_manager, "tcp_port", 5000)) if isinstance(getattr(self.peer_manager, "tcp_port", None), int) else 5000
+            )
+            self.presence_broadcaster._thread.start()
+        except Exception:
+            self.presence_broadcaster = None
 
         # Current chat peer
         self.peer_current = {}
@@ -227,10 +235,13 @@ class ChatUI:
     # ==========================================
 
     def get_user_input(self) -> str:
-
-        message = self.session.prompt(
-        [("class:prompt", "> ")]
-        )
+        if self.session is not None:
+            try:
+                message = self.session.prompt([("class:prompt", "> ")])
+            except Exception:
+                message = input("> ")
+        else:
+            message = input("> ")
 
         return message.strip()
 
@@ -240,11 +251,14 @@ class ChatUI:
 
     def print_styled(self, *fragments):
         """In nội dung có định dạng màu trên terminal."""
-
-        print_formatted_text(
-            FormattedText(fragments),
-            style=self.style
-        )
+        try:
+            print_formatted_text(
+                FormattedText(fragments),
+                style=self.style
+            )
+        except Exception:
+            plain_text = "".join(f[1] if isinstance(f, tuple) and len(f) > 1 else str(f) for f in fragments)
+            print(plain_text)
 
     def display_incoming_message(self, message: dict):
 
@@ -281,6 +295,22 @@ class ChatUI:
         self.last_message_time[sender_id] = timestamp
 
     def handle_incoming_message(self, message: dict):
+        if not isinstance(message, dict):
+            return
+
+        msg_type = message.get("type", "")
+        if "file" in msg_type and (
+            "request" in msg_type or "respon" in msg_type or "notification" in msg_type
+        ):
+            self.chat_manager.handle_file_notification(message)
+            if "request" in msg_type:
+                sender_id = message.get("sender_id", "Unknown")
+                filename = message.get("filename") or message.get("file_name", "Unknown")
+                self.print_styled(
+                    ("class:warning", f"\n[*] Yêu cầu nhận file từ {sender_id}: {filename}\n"),
+                    ("class:command", "    (Gõ /file để kiểm tra hoặc xem trong menu File Manager)\n")
+                )
+            return
 
         if not validate_chat_message(message):
             return
@@ -356,9 +386,12 @@ class ChatUI:
     # START CHAT UI
     # ==========================================
 
-    def start_chat(self, peer_in4: str):
+    def start_chat(self, peer_in4: Optional[str] = None):
 
         list_peer = self.get_online_peers_list()
+
+        if peer_in4 is None:
+            peer_in4 = input("Select peer: ").strip()
 
         if peer_in4 == "/quit" or peer_in4 == "/leave":
             return
@@ -451,7 +484,9 @@ class ChatUI:
             finally:
                 self.incoming_message_queue.task_done()
 
-    def chat_loop(self, peer, conn, client: ChatClient):
+    def chat_loop(self, peer, conn, client: Optional[ChatClient] = None):
+        if client is None:
+            client = ChatClient(peer["peer_id"], peer["ip"], peer["tcp_port"])
 
         self.receive_stop_event.clear()
 
@@ -463,17 +498,26 @@ class ChatUI:
 
         self.receive_thread.start()
 
+        entered_patch = False
+        cm = None
         try:
-            with patch_stdout():
+            try:
+                cm = patch_stdout()
+                cm.__enter__()
+                entered_patch = True
+            except Exception:
+                cm = None
+                entered_patch = False
 
-                while True:
+            while True:
 
                     message = self.get_user_input()
 
                     if message in ("/back", "/exit", "/leave"):
 
                         self.leave = True
-                        print(f"Leaving chat with {peer['username']}...")
+                        peer_name = peer.get("username", peer.get("peer_id", "peer"))
+                        print(f"Leaving chat with {peer_name}...")
                         return
 
                     if message == "/quit":
@@ -513,6 +557,11 @@ class ChatUI:
                     )
 
         finally:
+            if entered_patch and cm is not None:
+                try:
+                    cm.__exit__(None, None, None)
+                except Exception:
+                    pass
             self.receive_stop_event.set()
 
             if self.receive_thread.is_alive():
@@ -587,12 +636,19 @@ class ChatUI:
     def is_filename_in_message(self, user_input) -> str | None:
         """Kiểm tra user_input có chứa tên file hợp lệ không."""
         if not user_input:
-            return False
+            return None
+
+        # Nếu lệnh là /send <tên_file>, ưu tiên trích xuất tên file phía sau
+        parts = str(user_input).strip().split(None, 1)
+        if len(parts) > 1 and parts[0].lower() == "/send":
+            candidate = parts[1].strip().strip('"').strip("'")
+            if candidate:
+                return candidate
 
         available_files = self.get_available_files()
         filename = None
         for file in available_files:
-            if file.lower() in user_input.lower():
+            if file.lower() in str(user_input).lower():
                 filename = file
 
         return filename
@@ -633,30 +689,28 @@ class ChatUI:
 
 
     def find_file(self, filename) -> str | None:
-        """Tìm file trong thư mục docs và trả về đường dẫn đầy đủ."""
-
+        """Tìm file trong thư mục docs hoặc đường dẫn và trả về đường dẫn đầy đủ."""
         if not filename:
             return None
 
-        base_dir = os.path.abspath(self.file_dir)
+        # Nếu người dùng truyền trực tiếp một đường dẫn file hợp lệ
+        if os.path.isfile(filename):
+            return os.path.abspath(filename)
 
+        base_dir = os.path.abspath(self.file_dir)
         file_path = os.path.abspath(
             os.path.join(base_dir, filename)
         )
 
-        # Không cho phép truy cập ra ngoài thư mục docs.
-        try:
-            if os.path.commonpath(
-                [base_dir, file_path]
-            ) != base_dir:
-                return None
-        except ValueError:
-            return None
+        if os.path.isfile(file_path):
+            return file_path
 
-        if not os.path.isfile(file_path):
-            return None
+        # Thử tìm file tương đối so với thư mục hiện tại
+        current_rel = os.path.abspath(filename)
+        if os.path.isfile(current_rel):
+            return current_rel
 
-        return file_path
+        return None
 
     ##=============================================== 
     #           Xử lý thông báo nhận 
@@ -683,12 +737,14 @@ class ChatUI:
 
             transfer_id = request.get("transfer_id")
             sender_id = request.get("sender_id")
-            name = self.peer_manager.get_peer(sender_id)
-            filename = request.get("file_name")
+            peer_obj = self.peer_manager.get_peer(sender_id) if self.peer_manager else None
+            sender_name = peer_obj.get("username", sender_id) if peer_obj else sender_id
+            filename = request.get("filename") or request.get("file_name", "Unknown")
+            filesize = request.get("filesize") or request.get("file_size", 0)
 
             self.print_styled("\n========== FILE REQUEST ==========")
-            print(f"From: {name}")
-            print(f"File: {filename}")
+            print(f"From: {sender_name} ({sender_id})")
+            print(f"File: {filename} ({filesize} bytes)")
             print("[Y] Accept    [N] Reject")
 
             choice = self.get_user_input().strip().lower()
@@ -865,9 +921,8 @@ class ChatUI:
                     args = input()
 
             # 5. Exit
-            elif choice == "/quit":
+            elif choice in ("5", "/quit"):
                 print("Exiting P2P Chat App...")
-                
                 return
 
             else:
