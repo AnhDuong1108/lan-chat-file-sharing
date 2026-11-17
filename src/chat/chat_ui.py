@@ -225,7 +225,12 @@ class ChatUI:
         print("\n========== UNREAD MESSAGES ==========")
 
         for peer_id, count in unread_data.items():
-            peer_name = self.peer_manager.get_peer(peer_id).get("username", peer_id)
+            peer = self.peer_manager.get_peer(peer_id)
+
+            if peer is None:
+                peer_name = peer_id
+            else:
+                peer_name = peer.get("username", peer_id)
 
             print(f"{peer_name}: {count}")
 
@@ -342,9 +347,9 @@ class ChatUI:
 
             username = peer["username"] if peer else sender_id
 
-            self.print_styled("class:warning",
+            self.print_styled(("class:warning",
                 f"\n[*] New message from {username} [{self.chat_manager.unread_counts[sender_id]}]"
-            )
+            ))
 
 
     def handle_received_message(self, message):
@@ -894,7 +899,7 @@ class ChatUI:
                     args = input()
 
             # 5. Exit
-            elif choice in ("5", "/quit"):
+            elif choice == "/quit":
                 print("Exiting P2P Chat App...")
                 return
 

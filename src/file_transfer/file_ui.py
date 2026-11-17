@@ -278,35 +278,49 @@ class FileUI:
 
     def is_filename_in_message(self, user_input) -> str | None:
         """Kiểm tra user_input có chứa tên file hợp lệ không."""
+
         if not user_input:
             return None
 
-        # Nếu lệnh là /send <tên_file>, ưu tiên trích xuất tên file phía sau
         parts = str(user_input).strip().split(None, 1)
+
         if len(parts) > 1 and parts[0].lower() == "/send":
-            candidate = parts[1].strip().strip('"').strip("'")
-            if candidate:
-                return candidate
+            candidate = parts[1].strip()
+
+            # Xử lý tên file có dấu ngoặc kép
+            if candidate.startswith('"'):
+                end_quote = candidate.find('"', 1)
+                if end_quote != -1:
+                    return candidate[1:end_quote]
+
+            if candidate.startswith("'"):
+                end_quote = candidate.find("'", 1)
+                if end_quote != -1:
+                    return candidate[1:end_quote]
+
+            # Chỉ lấy đối số filename, bỏ qua receiver
+            filename = candidate.split()[0]
+            return filename
 
         available_files = self.get_available_files()
-        filename = None
+
         for file in available_files:
             if file.lower() in str(user_input).lower():
-                filename = file
+                return file
 
-        return filename
+        return None
 
 
     def get_available_files(self) -> list:
         """Lấy danh sách file trong thư mục docs."""
         
-        if not os.path.isdir(self.file_dir):
+        if not os.path.isdir(self.docs_dir):
             return []
 
         return [
             filename
-            for filename in os.listdir(self.file_dir)
-            if os.path.isfile(os.path.join(self.file_dir, filename))
+            for filename in os.listdir(self.docs_dir)
+            if os.path.isfile(os.path.join(self.docs_dir, filename))
         ]
 
 
