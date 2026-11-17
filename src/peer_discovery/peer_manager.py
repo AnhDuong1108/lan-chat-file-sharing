@@ -51,10 +51,10 @@ class PeerManager:
             return False
 
         with self._lock:
-            print("SET_STATUS ID:", id(self))
-            print("Old status:", self.status)
+      #      print("SET_STATUS ID:", id(self))
+      #      print("Old status:", self.status)
             self.status = status
-            print("New status:", self.status)
+      #      print("New status:", self.status)
 
         return True
 
