@@ -1,6 +1,9 @@
 import os
 import queue
 from typing import Any, Optional
+from peer_discovery.peer_manager import PeerManager
+from chat.chat_manager import ChatManager
+from file_transfer.file_manager import FileManager
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit import print_formatted_text
@@ -18,12 +21,12 @@ class FileUI:
 
     def __init__(
         self,
-        file_manager: Any,
-        chat_manager: Any,
-        peer_manager: Any,
+        file_manager: FileManager,
+        chat_manager: ChatManager,
+        peer_manager: PeerManager,
         chat_ui: Optional[Any] = None,
     ):
-
+        
         self.style = Style.from_dict({
                 "prompt": "#00ff87 bold",
                 "command": "#00afff bold",
@@ -71,15 +74,17 @@ class FileUI:
         )
 
     def display_help_menu(self):
-        print("\n================= FILE MANAGER =================")
-        print("/requests    - View and handle pending file reception requests")
-        print("/send        - Send a file to a device on the LAN")
-        print("/sessions    - View file transfer sessions and their progress")
-        print("/cancel      - Cancel an active file transfer session")
-        print("/files       - View available files in the docs/ directory")
-        print("/quit        - Return to the main menu")
-        print("/help        - Show all commands")
-        print("================================================")
+        print("\n========================= FILE MANAGER =========================")
+        print("/requests        - View and handle pending file reception requests")
+        print("/list            - View online peers ")
+        print("/send <filename> <receiver1> <receiver2> ... - Send a file to a device on the LAN")
+        print("/sessions        - View file transfer sessions and their progress")
+        print("/cancel          - Cancel an active file transfer session")
+        print("/files           - View available files in the docs/ directory")
+        print("/help            - Show all commands")
+        print("/quit            - Return to the main menu")
+        
+        print("==================================================================")
 
     def process_pending_requests(self) -> None:
         print("\n--- PENDING FILE RECEPTION REQUESTS ---")
@@ -121,38 +126,27 @@ class FileUI:
 
             if choice in ("y", "yes"):
                     self.file_manager.accept_file(transfer_id)
-                    print(f"[+] Accepted file '{filename}'. The file will be saved to '{self.downloads_dir}'.")
+                    self.print_styled("class:warning", f"[+] Accepted file '{filename}'. The file will be saved to '{self.downloads_dir}'.")
             else:
                     self.file_manager.reject_file(transfer_id)
-                    print(f"[-] Rejected file '{filename}'.")
+                    self.print_styled("class:warning", f"[-] Rejected file '{filename}'.")
 
                     self.file_manager.file_request_queue.task_done()
 
-    def send_file_to_peer(self) -> None:
-        print("\n--- SEND FILE TP PEER ---")
+    def send_file_to_peer(self, filename: str, receiver: str) -> None:
+        print("\n--- SEND FILE TO PEER ---")
         peers = (
             self.peer_manager.get_online_peers()
             if self.peer_manager
             else []
         )
-        if not peers:
-            print("No devices (peers) are currently online on the LAN.")
-            return
-
-        print("Online devices:")
-        for idx, p in enumerate(peers, start=1):
-            print(f"{idx}. {p['username']} (ID: {p['peer_id']}, IP: {p['ip']})")
-
-        choice = input("Select a peer number or Peer ID (press Enter to go back): ").strip()
-        if not choice:
-            return
 
         target_peer = None
         for idx, p in enumerate(peers, start=1):
             if (
-                choice == str(idx)
-                or choice.lower() == p["peer_id"].lower()
-                or choice.lower() == p["username"].lower()
+                receiver == str(idx)
+                or receiver.lower() == p["peer_id"].lower()
+                or receiver.lower() == p["username"].lower()
             ):
                 target_peer = p
                 break
@@ -161,17 +155,16 @@ class FileUI:
             self.display_error("Selected peer not found.")
             return
 
-        file_input = input("Enter the file name in docs/ or the file path: ").strip().strip('"').strip("'")
-        if not file_input:
+        if not filename:
             return
 
-        file_path = file_input
+        file_path = filename
         if not os.path.isfile(file_path):
-            in_docs = os.path.join(self.docs_dir, file_input)
+            in_docs = os.path.join(self.docs_dir, filename)
             if os.path.isfile(in_docs):
                 file_path = in_docs
             else:
-                self.display_error(f"File '{file_input}' không tồn tại.")
+                self.display_error(f"File '{filename}' does not exit.")
                 return
 
         try:
@@ -271,7 +264,7 @@ class FileUI:
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
-        print(
+        self.display_success(
             f"\r[File Transfer] {filename} | "
             f"Peer: {peer_id} | "
             f"{progress:.1f}% "
@@ -283,23 +276,126 @@ class FileUI:
         if progress >= 100:
             print()
 
+    def is_filename_in_message(self, user_input) -> str | None:
+        """Kiểm tra user_input có chứa tên file hợp lệ không."""
+        if not user_input:
+            return None
+
+        # Nếu lệnh là /send <tên_file>, ưu tiên trích xuất tên file phía sau
+        parts = str(user_input).strip().split(None, 1)
+        if len(parts) > 1 and parts[0].lower() == "/send":
+            candidate = parts[1].strip().strip('"').strip("'")
+            if candidate:
+                return candidate
+
+        available_files = self.get_available_files()
+        filename = None
+        for file in available_files:
+            if file.lower() in str(user_input).lower():
+                filename = file
+
+        return filename
+
+
+    def get_available_files(self) -> list:
+        """Lấy danh sách file trong thư mục docs."""
+        
+        if not os.path.isdir(self.file_dir):
+            return []
+
+        return [
+            filename
+            for filename in os.listdir(self.file_dir)
+            if os.path.isfile(os.path.join(self.file_dir, filename))
+        ]
+
+
+    def display_available_files(self):
+        """Hiển thị danh sách file có thể gửi."""
+        files = self.get_available_files()
+
+        if not files:
+            print("[File] Không có file nào trong thư mục docs.")
+            return
+
+        id_files = []
+        print("\n========== AVAILABLE FILES ==========")
+
+        for index, filename in enumerate(files, start=1):
+            id_files.append({"index" : index,
+                                "filename": filename})
+            print(f"{index}. {filename}")
+
+        print("=====================================")
+
+        return id_files
+
+    def validate_send_command(self, user_input: str) -> tuple[bool, str | None, list[str]]:
+        """
+        Validate /send command.
+
+        Format:
+            /send <filename> <receiver1> [receiver2] ...
+
+        Returns:
+            (is_valid, filename, receivers)
+        """
+        parts = user_input.strip().split()
+
+        if len(parts) < 3:
+            return False, None, []
+
+        if parts[0] != "/send":
+            return False, None, []
+
+        filename = parts[1]
+        receivers = parts[2:]
+
+        return True, filename, receivers
+
     def start(self) -> None:
         self.display_help_menu()
         while True:
             choice = input()
             if choice == "/requests":
                 self.process_pending_requests()
-            elif choice == "/send":
-                self.send_file_to_peer()
+
+            elif choice == "/list":
+                peers = self.peer_manager.get_online_peers()
+
+                if not peers:
+                    print("No peers online.")
+                    continue
+
+                for idx, peer in enumerate(peers, start = 1):
+                     print(f"{idx}. {peer.get('username', 'Unknown')}")
+
+            elif choice.startswith("/send"):
+                is_valid, filename, receivers = self.validate_send_command(choice)
+
+                if not is_valid:
+                    self.display_error(
+                        "Invalid command! Usage: /send <filename> <receiver1> [receiver2] ..."
+                    )
+                    continue
+
+                for receiver in receivers:
+                    self.send_file_to_peer(filename, receiver)
+
             elif choice == "/sessions":
                 self.show_transfer_status()
+
             elif choice == "/cancel":
                 self.cancel_active_transfer()
+
             elif choice == "/files":
                 self.list_docs_files()
-            elif choice == "/quit":
-                break
+
             elif choice == "/help":
                 self.display_help_menu()
+
+            elif choice == "/quit":
+                break
+
             else:
                 print("Invalid option")

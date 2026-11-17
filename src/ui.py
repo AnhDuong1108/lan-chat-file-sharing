@@ -23,7 +23,7 @@ class UI:
 
     def display_main_menu(self):
         """Display the main menu and prompt the user for a command."""
-        print("\n========== LAN CHAT & FILE SHARING ==========")
+        print("\n ================ MAIN MENU ===============")
         print("/chat          - Open Chat")
         print("/files         - Open File Manager")
         print("/quit          - Exit the program")
@@ -61,10 +61,15 @@ class UI:
         self.file_ui.start()
 
     def start(self):
+        first = True
+        print("\n========== LAN CHAT & FILE SHARING ==========")
         self.display_main_menu()
         """Lặp menu và điều hướng đến chức năng được chọn cho tới khi thoát."""
         while True:
-            print("================ MAIN MENU ===============")
+            if not first:
+                print("================ MAIN MENU ===============")
+            first = False
+            
             choice = input()
             if choice == "/chat":
                 self.display_chat_menu()

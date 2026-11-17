@@ -73,6 +73,7 @@ class FileReceiver:
         return stem not in reserved and re.fullmatch(r"(COM|LPT)[1-9¹²³]", stem) is None
 
     def receive_file_data(self, conn, transfer_info) -> bool:
+       
         """
         Nhận đúng filesize byte vào file tạm rồi kiểm tra SHA-256 trước khi lưu.
 
@@ -100,6 +101,7 @@ class FileReceiver:
                     raise OSError("Transfer cancelled")
                 remaining = info["filesize"] - self.bytes_received
                 chunk = conn.recv(min(BUFFER_SIZE, remaining))
+                print(f"[DEBUG RECEIVER] Received {len(chunk)} bytes")
                 if not chunk:
                     raise OSError("Connection closed before file was complete")
                 self.save_file(temporary_path, chunk)
@@ -116,6 +118,12 @@ class FileReceiver:
             if info["filesize"] == 0:
                 self._update_progress(0)
             return True
+
+        except FileExistsError:
+            self.last_error = f"File '{info['filename']}' already exists in downloads folder."
+            logger.warning(self.last_error)
+            return False
+        
         except (OSError, TypeError, ValueError) as exc:
             self.last_error = str(exc)
             # Phần dữ liệu chưa đọc thuộc transfer lỗi, đóng để tránh lệch framing.

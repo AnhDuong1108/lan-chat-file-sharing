@@ -3,7 +3,6 @@
 Lỗi hiện tại:
 1. không cập nhật được status
 """
-from contextlib import nullcontext
 from datetime import datetime
 import os
 import queue
@@ -343,7 +342,7 @@ class ChatUI:
 
             username = peer["username"] if peer else sender_id
 
-            print(
+            self.print_styled("class:warning",
                 f"\n[*] New message from {username} [{self.chat_manager.unread_counts[sender_id]}]"
             )
 
@@ -360,13 +359,6 @@ class ChatUI:
     def change_status(self, status: str) -> bool:
 
         try:
-            #print("PeerManager ID:", id(self.peer_manager))
-            #print("Status before:", self.peer_manager.status)
-
-            #result = self.peer_manager.set_status(status)
-
-            #print("Status after:", self.peer_manager.status)  
-            
             if not self.peer_manager.set_status(status):  
                return False
             
@@ -603,14 +595,14 @@ class ChatUI:
                 file_path = self.find_file(filename)
 
                 if not file_path:
-                    self.display_error("File không tồn tại.")
+                    self.display_error("File does not exit.")
                     return
 
                 self.confirm_file_transfer(file_path, peer)
 
                 return
             else:
-                self.display_error("file không tồn tại")
+                self.display_error("File does not exit.")
 
     def handle_file_receive(self) -> bool:
         """
@@ -780,7 +772,7 @@ class ChatUI:
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
-        print(
+        self.display_success(
             f"\r[File Transfer] {filename} | "
             f"Peer: {peer_id} | "
             f"{progress:.1f}% "
@@ -799,49 +791,26 @@ class ChatUI:
         """
 
         if not file_path or not os.path.isfile(file_path):
-            self.display_error("File không tồn tại.")
+            self.display_error("File does not exit..")
             return False
 
         if not peer:
-            self.display_error("Chưa chọn peer.")
+            self.display_error("No peer selected..")
             return False
 
-        peer_id = (
-            peer.get("peer_id")
-            if isinstance(peer, dict)
-            else peer.peer_id
-        )
-
         try:
-            # Tạo file request và đăng ký transfer.
-            request = self.file_manager.create_file_request(
-                peer_id,
-                file_path
-            )
-
-            if not request:
-                self.display_error("Không thể tạo yêu cầu gửi file.")
-                return False
-
             # Gửi notification qua Chat TCP.
-            result = self.chat_manager.send_file_request(
-                peer_id,
-                request
-            )
-
-            if result is False:
-                self.display_error("Không thể gửi yêu cầu truyền file.")
-                return False
-
+            tid = self.file_manager.send_file(peer["peer_id"], file_path)
             self.display_success(
-                f"Đã gửi yêu cầu truyền file: "
-                f"{os.path.basename(file_path)}"
+                f"File transfer request for '{os.path.basename(file_path)}' (ID: {tid}) "
+                f"sent successfully to {peer['username']}."
             )
+            print("    Waiting for the recipient to accept the file transfer...")
 
             return True
 
         except Exception as e:
-            self.display_error(f"Lỗi gửi file: {e}")
+            self.display_error(e)
             return False
 
     def confirm_file_transfer(self, file_path, peer):

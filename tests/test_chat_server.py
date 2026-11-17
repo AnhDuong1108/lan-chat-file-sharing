@@ -14,9 +14,9 @@ if ROOT_DIR not in sys.path:
 if SRC_DIR not in sys.path:
     sys.path.insert(0, SRC_DIR)
 
-from src.chat.chat_server import ChatServer # noqa: E402
-from src.chat.chat_manager import ChatManager # noqa: E402
-from src.peer_discovery.peer_manager import PeerManager # noqa: E402
+from src.chat.chat_server import ChatServer
+from src.chat.chat_manager import ChatManager
+from src.peer_discovery.peer_manager import PeerManager
 
 
 class TestChatServer(unittest.TestCase):

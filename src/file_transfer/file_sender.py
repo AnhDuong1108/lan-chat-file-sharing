@@ -93,6 +93,22 @@ class FileSender:
             if not send_framed_message(conn, start):
                 raise OSError("Cannot send file_data_start")
             response = receive_framed_message(conn)
+
+            # Cho biết nguyên nhân từ chối file
+            if not isinstance(response, dict):
+                raise OSError("Receiver returned an invalid handshake response")
+
+            if response.get("type") != "file_data_ready":
+                raise OSError(
+                    f"Unexpected handshake response: {response}"
+                )
+
+            if response.get("transfer_id") != transfer_id:
+                raise OSError(
+                    f"Transfer ID mismatch: expected={transfer_id}, "
+                    f"received={response.get('transfer_id')}"
+                )
+
             if (
                 response is None
                 or response.get("type") != "file_data_ready"
