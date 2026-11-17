@@ -7,6 +7,7 @@ import sys
 import time
 import uuid
 from typing import List, Optional, Tuple
+import threading
 
 # peer 1: python src/main.py --peer-id A001 --username Alice --port 5001
 # peer 2: python src/main.py --peer-id B001 --username Bob --port 5005

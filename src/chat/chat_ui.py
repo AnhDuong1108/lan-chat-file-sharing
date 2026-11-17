@@ -85,6 +85,7 @@ class ChatUI:
     
     def set_file_manager(self, file_manager: FileManager):
         self.file_manager = file_manager
+        self.file_manager.on_progress = self.display_transfer_progress
 
     def display_chat_header(self, peer):
         print(f"\n========== CHAT WITH {peer['username']} ==========")
@@ -761,33 +762,34 @@ class ChatUI:
 
 
     ##  ====== display transfer file ======
-    def display_transfer_progress(self):
-        """Hiển thị tiến độ các phiên truyền file đang hoạt động."""
+    def display_transfer_progress(self, transfer: dict):
+        """Hiển thị tiến độ truyền file trên cùng một dòng."""
 
         if not self.file_manager:
+            self.display_error("Not file manager")
             return
 
-        with self.file_manager.lock:
-            transfers = list(self.file_manager.transfers)
+        if transfer.get("status") != "transferring":
+            return
 
-        for transfer in transfers:
+        filename = transfer.get("file_name", "Unknown")
+        peer_id = transfer.get("peer_id", "Unknown")
+        progress = float(transfer.get("progress", 0))
 
-            if transfer.get("status") != "transferring":
-                continue
+        file_size = transfer.get("file_size", 0)
+        transferred = int(file_size * progress / 100)
 
-            filename = transfer.get("file_name", "Unknown")
-            peer_id = transfer.get("peer_id", "Unknown")
-            progress = transfer.get("progress")
+        print(
+            f"\r[File Transfer] {filename} | "
+            f"Peer: {peer_id} | "
+            f"{progress:.1f}% "
+            f"({transferred}/{file_size} bytes)",
+            end="",
+            flush=True
+        )
 
-            file_size = transfer.get("file_size")
-            transferred = float(file_size)*float(progress) / 100
-
-            print(
-                f"\n[File Transfer] {filename} | "
-                f"Peer: {peer_id} | "
-                f"{progress:.1f}% "
-                f"({transferred}/{file_size} bytes)"
-            )
+        if progress >= 100:
+            print()
 
     ## ====== Gửi file =======
     def file_transfer(self, file_path, peer) -> bool:
@@ -846,15 +848,21 @@ class ChatUI:
 
         filename = os.path.basename(file_path)
 
-        print(f"\nBạn có muốn gửi file '{filename}' không?")
+        print(f"\nDo you want to send the file '{filename}'?")
         print("[Y] Yes    [N] No")
 
         choice = self.get_user_input().strip().lower()
 
         if choice in ("y", "yes"):
-            self.file_transfer(file_path, peer)
+            success = self.file_transfer(file_path, peer)
+
+            if success:
+                self.display_success(
+                    f"File transfer request sent: {filename}"
+                )
+            
         else:
-            self.display_error("Đã hủy gửi file.")
+            self.display_error("File transfer cancelled.")
 
     #Khởi động
 

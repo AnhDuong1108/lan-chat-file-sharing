@@ -24,12 +24,12 @@ class UI:
     def display_main_menu(self):
         """Hiển thị menu tổng hợp và trả lựa chọn người dùng."""
         print("\n========== LAN CHAT & FILE SHARING ==========")
-        print("1. Peer Discovery")
-        print("2. Chat")
-        print("3. File Manager")
-        print("4. Exit")
+        print("1. Chat")
+        print("2. File Manager")
+        print("Exit command: /quit")
         return input("Choose option: ").strip()
 
+    # phần này là /list trong chat
     def display_peer_menu(self):
         """Hiển thị các peer đã phát hiện, gồm cả trạng thái away và offline."""
         peers = self.peer_manager.get_all_peers()
@@ -63,12 +63,10 @@ class UI:
         while True:
             choice = self.display_main_menu()
             if choice == "1":
-                self.display_peer_menu()
-            elif choice == "2":
                 self.display_chat_menu()
-            elif choice == "3":
+            elif choice == "2":
                 self.display_file_menu()
-            elif choice == "4":
+            elif choice == "/quit":
                 return
             else:
-                print("Lựa chọn không hợp lệ. Vui lòng chọn từ 1 đến 4.")
+                print("Invalid option. Please try again.")

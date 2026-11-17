@@ -28,6 +28,9 @@ class FileManager:
         self.chat_manager = chat_manager
         self.file_port = file_port
 
+        #Gọi callback ở UI
+        self.on_progress = None
+
         # Quản lý các phiên truyền file
         self.active_transfers: List[Dict[str, Any]] = []
         self.completed_transfers: List[Dict[str, Any]] = []
@@ -288,11 +291,16 @@ class FileManager:
 
     def _on_progress(self, transfer_id: str, progress: float) -> None:
         """Cập nhật phần trăm tiến độ truyền file."""
+        transfer = None 
         with self.lock:
             for t in self.active_transfers:
                 if t.get("transfer_id") == transfer_id:
                     t["progress"] = progress
-                    break
+                    transfer = t.copy()
+                    break   
+
+        if transfer and self.on_progress:
+            self.on_progress(transfer)
 
     # ==========================================
     # PHẢN HỒI ACCEPT / REJECT

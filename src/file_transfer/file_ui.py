@@ -1,7 +1,9 @@
 import os
 import queue
 from typing import Any, Optional
-
+from prompt_toolkit.styles import Style
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit import print_formatted_text
 
 class FileUI:
     """
@@ -21,7 +23,22 @@ class FileUI:
         peer_manager: Any,
         chat_ui: Optional[Any] = None,
     ):
+
+        self.style = Style.from_dict({
+                "prompt": "#00ff87 bold",
+                "command": "#00afff bold",
+                "success": "#00ff91",
+                "error": "#ff5f5f bold",
+                "warning": "#ffaf00",
+                "system": "#888888",
+                "peer": "#5fd7ff bold",
+                "timestamp": "#888888 italic",
+            })
+        
         self.file_manager = file_manager
+        if self.file_manager:
+            self.file_manager.on_progress = self.display_transfer_progress
+
         self.chat_manager = chat_manager
         self.peer_manager = peer_manager
         self.chat_ui = chat_ui
@@ -30,16 +47,39 @@ class FileUI:
         os.makedirs(self.docs_dir, exist_ok=True)
         os.makedirs(self.downloads_dir, exist_ok=True)
 
+    def print_styled(self, *fragments):
+        """In nội dung có định dạng màu trên terminal."""
+        try:
+            print_formatted_text(
+                FormattedText(fragments),
+                style=self.style
+            )
+        except Exception:
+            plain_text = "".join(f[1] if isinstance(f, tuple) and len(f) > 1 else str(f) for f in fragments)
+            print(plain_text)
+
+    def display_error(self, message):
+            self.print_styled(
+                ("class:error", "[ERROR] "),
+                ("", message)
+            )
+    
+    def display_success(self, message):
+        self.print_styled(
+            ("class:success", "[SUCCESS] "),
+            ("", message)
+        )
+
     def display_menu(self) -> str:
         print("\n================= FILE MANAGER =================")
-        print("1. Xem và xử lý yêu cầu nhận file đang chờ")
-        print("2. Gửi file tới một máy trong mạng LAN")
-        print("3. Xem danh sách và tiến độ các phiên truyền file")
-        print("4. Hủy một phiên truyền file đang hoạt động")
-        print("5. Xem danh sách file có sẵn trong thư mục docs/")
-        print("6. Quay lại menu chính")
+        print("1. View and handle pending file reception requests")
+        print("2. Send a file to a device on the LAN")
+        print("3. View file transfer sessions and their progress")
+        print("4. Cancel an active file transfer session")
+        print("5. View available files in the docs/ directory")
+        print("6. Return to the main menu")
         print("================================================")
-        return input("Chọn chức năng (1-6): ").strip()
+        return input("Choose option (1-6): ").strip()
 
     def process_pending_requests(self) -> None:
         print("\n--- CÁC YÊU CẦU NHẬN FILE ĐANG CHỜ ---")
@@ -75,18 +115,18 @@ class FileUI:
                 else req.get("file_size", 0)
             )
 
-            print(f"\n[*] Yêu cầu gửi file từ: {sender_name} (Peer ID: {sender_id})")
-            print(f"    Tên file: {filename} ({filesize} bytes)")
-            choice = input("    Bạn có chấp nhận nhận file này không? (Y/N): ").strip().lower()
+            self.print_styled("class:warning", f"\n[*] File transfer request from: {sender_name} (Peer ID: {sender_id})")
+            print(f"    File name: {filename} ({filesize} bytes)")
+            choice = input("    Do you want to accept this file? (Y/N): ").strip().lower()
 
             if choice in ("y", "yes"):
-                self.file_manager.accept_file(transfer_id)
-                print(f"[+] Đã chấp nhận file '{filename}'. Dữ liệu sẽ được lưu vào '{self.downloads_dir}'.")
+                    self.file_manager.accept_file(transfer_id)
+                    print(f"[+] Accepted file '{filename}'. The file will be saved to '{self.downloads_dir}'.")
             else:
-                self.file_manager.reject_file(transfer_id)
-                print(f"[-] Đã từ chối nhận file '{filename}'.")
+                    self.file_manager.reject_file(transfer_id)
+                    print(f"[-] Rejected file '{filename}'.")
 
-            self.file_manager.file_request_queue.task_done()
+                    self.file_manager.file_request_queue.task_done()
 
     def send_file_to_peer(self) -> None:
         print("\n--- GỬI FILE TỚI PEER ---")
@@ -118,7 +158,7 @@ class FileUI:
                 break
 
         if not target_peer:
-            print("[!] Không tìm thấy peer đã chọn.")
+            self.display_error("Không tìm thấy peer đã chọn.")
             return
 
         file_input = input("Nhập tên file trong docs/ hoặc đường dẫn file: ").strip().strip('"').strip("'")
@@ -131,15 +171,15 @@ class FileUI:
             if os.path.isfile(in_docs):
                 file_path = in_docs
             else:
-                print(f"[!] File '{file_input}' không tồn tại.")
+                self.display_error(f"File '{file_input}' không tồn tại.")
                 return
 
         try:
             tid = self.file_manager.send_file(target_peer["peer_id"], file_path)
-            print(f"[+] Đã gửi yêu cầu truyền file '{os.path.basename(file_path)}' (ID: {tid}) tới {target_peer['username']}.")
+            self.display_success(f"Đã gửi yêu cầu truyền file '{os.path.basename(file_path)}' (ID: {tid}) tới {target_peer['username']}.")
             print("    Đang chờ đối phương chấp nhận nhận file...")
         except Exception as e:
-            print(f"[!] Lỗi khi gửi file: {e}")
+            self.display_error(f"Lỗi khi gửi file: {e}")
 
     def show_transfer_status(self) -> None:
         print("\n--- TIẾN ĐỘ & TRẠNG THÁI TRUYỀN FILE ---")
@@ -187,12 +227,12 @@ class FileUI:
                 break
 
         if target_id and self.file_manager.cancel_transfer(target_id):
-            print(f"[+] Đã hủy thành công phiên truyền {target_id}.")
+            self.display_success(f"Đã hủy thành công phiên truyền {target_id}.")
         else:
-            print("[!] Không tìm thấy phiên truyền hợp lệ để hủy.")
+            self.display_error("Không tìm thấy phiên truyền hợp lệ để hủy.")
 
     def list_docs_files(self) -> None:
-        print(f"\n--- DANH SÁCH FILE TRONG THƯ MỤC docs/ ({self.docs_dir}) ---")
+        print(f"\n--- LIST FILE IN docs/ ({self.docs_dir}) ---")
         files = [
             f
             for f in os.listdir(self.docs_dir)
@@ -204,6 +244,35 @@ class FileUI:
         for idx, f in enumerate(files, start=1):
             size = os.path.getsize(os.path.join(self.docs_dir, f))
             print(f"{idx}. {f} ({size} bytes)")
+
+    def display_transfer_progress(self, transfer: dict):
+        """Hiển thị tiến độ truyền file trên cùng một dòng."""
+
+        if not self.file_manager:
+            self.display_error("Not file manager")
+            return
+
+        if transfer.get("status") != "transferring":
+            return
+
+        filename = transfer.get("file_name", "Unknown")
+        peer_id = transfer.get("peer_id", "Unknown")
+        progress = float(transfer.get("progress", 0))
+
+        file_size = transfer.get("file_size", 0)
+        transferred = int(file_size * progress / 100)
+
+        print(
+            f"\r[File Transfer] {filename} | "
+            f"Peer: {peer_id} | "
+            f"{progress:.1f}% "
+            f"({transferred}/{file_size} bytes)",
+            end="",
+            flush=True
+        )
+
+        if progress >= 100:
+            print()
 
     def start(self) -> None:
         while True:
@@ -221,4 +290,4 @@ class FileUI:
             elif choice == "6":
                 break
             else:
-                print("Lựa chọn không hợp lệ. Vui lòng chọn từ 1 đến 6.")
+                print("Invalid option")
