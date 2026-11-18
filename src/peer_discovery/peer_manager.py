@@ -9,7 +9,7 @@ class PeerManager:
     thông qua giao thức UDP presence discovery.
     """
 
-    def __init__(self, self_peer_id: str, username: str, tcp_port: int):
+    def __init__(self, self_peer_id: str, username: str = "User", tcp_port: int = 5000):
         """
         Khởi tạo trình quản lý peer.
 
@@ -23,8 +23,7 @@ class PeerManager:
         self.peers: Dict[str, Dict[str, Any]] = {}
         self._lock = threading.RLock()
 
-    def init(self, self_peer_id: str, username: str, tcp_port: int) -> None:
-      #  print("[DEBUG] PeerManager.init() called")
+    def init(self, self_peer_id: str, username: str = "User", tcp_port: int = 5000) -> None:
         """
         Khởi tạo hoặc cài đặt lại trình quản lý peer với self_peer_id mới.
         """

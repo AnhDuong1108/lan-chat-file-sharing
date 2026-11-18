@@ -1,0 +1,2 @@
+Xin chao! Day la file demo truyen tai du lieu mang ngang hang LAN P2P.
+Kiem thu truyen file thanh cong voi ma SHA-256 va chia nho theo chunk!
