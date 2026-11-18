@@ -9,7 +9,7 @@ import threading
 import unittest
 from types import ModuleType
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 SRC_DIR = str(Path(__file__).resolve().parents[1] / "src")
 if SRC_DIR not in sys.path:
@@ -451,10 +451,46 @@ class TestCombinedUI(unittest.TestCase):
         from prompt_toolkit.input import DummyInput
         from prompt_toolkit.output import DummyOutput
 
-        with create_app_session(input=DummyInput(), output=DummyOutput()):
+        with create_app_session(input=DummyInput(), output=DummyOutput()), patch(
+            "chat.chat_ui.PresenceBroadcaster"
+        ):
             ui = UI(Mock(), Mock(), None)
-            with patch("builtins.input", side_effect=["2", "5", "3", "4"]), patch("builtins.print"):
+            with (
+                patch("builtins.input", side_effect=["/chat", "/quit", "/help", "/quit"]) as user_input,
+                patch("builtins.print") as output,
+                patch.object(ui.chat_ui, "display_help_menu", wraps=ui.chat_ui.display_help_menu) as chat_help,
+                patch.object(ui, "display_main_menu", wraps=ui.display_main_menu) as main_menu,
+            ):
                 ui.start()
+            chat_help.assert_called_once_with()
+            self.assertEqual(main_menu.call_count, 2)
+            self.assertEqual(user_input.call_count, 4)
+            self.assertNotIn(call("Invalid option. Please try again."), output.call_args_list)
+
+    def test_real_file_ui_returns_to_main_menu(self):
+        """FileUI thật nhận /quit rồi trả quyền xử lý /help cho menu chính."""
+        from file_transfer.file_ui import FileUI
+
+        peers, chats, files, chat_ui = Mock(), Mock(), Mock(), Mock()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch("file_transfer.file_ui.os.path.abspath", side_effect=lambda path: str(root / path)):
+                file_ui = FileUI(files, chats, peers, chat_ui)
+            ui = UI(peers, chats, files, chat_ui=chat_ui, file_ui=file_ui)
+            with (
+                patch("builtins.input", side_effect=["/files", "/quit", "/help", "/quit"]) as user_input,
+                patch("builtins.print") as output,
+                patch.object(file_ui, "display_help_menu", wraps=file_ui.display_help_menu) as file_help,
+                patch.object(ui, "display_main_menu", wraps=ui.display_main_menu) as main_menu,
+            ):
+                ui.start()
+            file_help.assert_called_once_with()
+            self.assertEqual(main_menu.call_count, 2)
+            self.assertEqual(user_input.call_count, 4)
+            self.assertNotIn(call("Invalid option. Please try again."), output.call_args_list)
+            self.assertNotIn(call("Invalid option"), output.call_args_list)
+            self.assertEqual(Path(file_ui.docs_dir).parent, root)
+            self.assertEqual(Path(file_ui.downloads_dir).parent, root)
 
     def test_injected_chat_ui_is_reused_by_file_ui(self):
         """Issue 2 có thể truyền ChatUI đã nối FileManager, cùng đối tượng được FileUI dùng."""
@@ -474,14 +510,19 @@ class TestCombinedUI(unittest.TestCase):
     def test_menu_routes_to_chat_and_injected_file_ui(self):
         """Menu gọi ChatUI và FileUI bên ngoài rồi quay lại để xử lý lựa chọn tiếp."""
         peers, chats, files, file_ui = Mock(), Mock(), Mock(), Mock()
-        peers.get_all_peers.return_value = []
         with patch("ui.ChatUI") as chat_type:
             ui = UI(peers, chats, files, file_ui=file_ui)
-        with patch("builtins.input", side_effect=["bad", "1", "2", "3", "4"]), patch("builtins.print"):
+        routes = Mock()
+        routes.attach_mock(chat_type.return_value.start, "chat")
+        routes.attach_mock(file_ui.start, "files")
+        with (
+            patch("builtins.input", side_effect=["bad", "/chat", "/files", "/quit"]) as user_input,
+            patch("builtins.print") as output,
+        ):
             ui.start()
-        peers.get_all_peers.assert_called_once()
-        chat_type.return_value.start.assert_called_once()
-        file_ui.start.assert_called_once()
+        self.assertEqual(routes.mock_calls, [call.chat(), call.files()])
+        self.assertEqual(user_input.call_count, 4)
+        self.assertEqual(output.call_args_list.count(call("Invalid option. Please try again.")), 1)
         self.assertIs(ui.file_manager, files)
 
     def test_file_menu_reports_missing_dependencies(self):
