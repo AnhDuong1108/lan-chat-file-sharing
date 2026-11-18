@@ -777,7 +777,8 @@ class ChatUI:
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
-        self.display_success(
+        self.display_success("")
+        print(
             f"\r[File Transfer] {filename} | "
             f"Peer: {peer_id} | "
             f"{progress:.1f}% "

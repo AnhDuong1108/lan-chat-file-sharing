@@ -120,16 +120,16 @@ class FileUI:
                 else req.get("file_size", 0)
             )
 
-            self.print_styled("class:warning", f"\n[*] File transfer request from: {sender_name} (Peer ID: {sender_id})")
+            self.print_styled(("class:warning", f"\n[*] File transfer request from: {sender_name} (Peer ID: {sender_id})"))
             print(f"    File name: {filename} ({filesize} bytes)")
             choice = input("    Do you want to accept this file? (Y/N): ").strip().lower()
 
             if choice in ("y", "yes"):
                     self.file_manager.accept_file(transfer_id)
-                    self.print_styled("class:warning", f"[+] Accepted file '{filename}'. The file will be saved to '{self.downloads_dir}'.")
+                    self.print_styled(("class:warning", f"[+] Accepted file '{filename}'. The file will be saved to '{self.downloads_dir}'."))
             else:
                     self.file_manager.reject_file(transfer_id)
-                    self.print_styled("class:warning", f"[-] Rejected file '{filename}'.")
+                    self.print_styled(("class:warning", f"[-] Rejected file '{filename}'."))
 
                     self.file_manager.file_request_queue.task_done()
 
@@ -264,7 +264,7 @@ class FileUI:
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
-        self.display_success(
+        print(
             f"\r[File Transfer] {filename} | "
             f"Peer: {peer_id} | "
             f"{progress:.1f}% "

@@ -101,7 +101,7 @@ class FileReceiver:
                     raise OSError("Transfer cancelled")
                 remaining = info["filesize"] - self.bytes_received
                 chunk = conn.recv(min(BUFFER_SIZE, remaining))
-                print(f"[DEBUG RECEIVER] Received {len(chunk)} bytes")
+                #print(f"[DEBUG RECEIVER] Received {len(chunk)} bytes")
                 if not chunk:
                     raise OSError("Connection closed before file was complete")
                 self.save_file(temporary_path, chunk)
