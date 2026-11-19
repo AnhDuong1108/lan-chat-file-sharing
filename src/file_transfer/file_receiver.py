@@ -35,14 +35,17 @@ def receive_file_data_start(conn):
 class FileReceiver:
     """Mỗi đối tượng xử lý một transfer tại một thời điểm, sau xác thực của manager."""
 
-    def __init__(self, download_dir, *, on_progress=None, cancel_event=None):
+    def __init__(self, download_dir, *, on_progress=None, cancel_event=None,  on_complete=None,
+    on_error=None):
         """Lưu thư mục đích, callback tiến độ và Event hủy dùng chung với manager."""
         self.download_dir = Path(download_dir)
         self.bytes_received = 0
         self.progress = 0.0
         self.output_path = None
-        self.last_error = None
         self.on_progress = on_progress
+        self.on_complete = on_complete
+        self.on_error = on_error
+
         self.cancel_event = cancel_event if cancel_event is not None else threading.Event()
 
     @staticmethod
@@ -117,16 +120,25 @@ class FileReceiver:
             self.progress = 100.0
             if info["filesize"] == 0:
                 self._update_progress(0)
+
+            logger.info("File received successfully: %s", info["filename"])
+            if self.on_complete is not None:
+                self.on_complete(info["filename"])    
             return True
 
         except FileExistsError:
             self.last_error = f"File '{info['filename']}' already exists in downloads folder."
             logger.warning(self.last_error)
+
+            if self.on_error is not None:
+                self.on_error(self.last_error)
             return False
         
         except (OSError, TypeError, ValueError) as exc:
             self.last_error = str(exc)
             # Phần dữ liệu chưa đọc thuộc transfer lỗi, đóng để tránh lệch framing.
+            if self.on_error is not None:
+                self.on_error(self.last_error)
             try:
                 conn.close()
             except OSError:

@@ -95,56 +95,78 @@ Before installing the project, ensure that the following requirements are met:
 
 ### Step 1: Extract the project
 
-Download the submitted ZIP file and extract it to a directory on your computer.
+Extract the submitted ZIP file into a directory on your computer.
 
-### Step 2: Create a virtual environment
-
-It is recommended to use a virtual environment to isolate project dependencies.
-
-**Windows:**
+Open a terminal and navigate to the project directory:
 
 ```bash
-python -m venv venv
-venv\Scripts\activate
+cd <project-directory>
 ```
 
-**Linux / macOS:**
+### Step 2: Install dependencies
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### Step 3: Install dependencies
-
-If the project contains a `requirements.txt` file, install the required packages:
+Install the required Python packages using `requirements.txt`:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-If no external dependencies are required, the project can run using Python's standard library.
+### Step 3: Start the first peer
 
-### Step 4: Configure network settings
+Open a terminal window and run the application:
 
-Open the network configuration file:
-
-```text
-src/peer-discover/config.py
+```bash
+python src/main.py --peer-id A001 --username Alice --port 5001
 ```
 
-Check the configuration parameters, including:
+### Step 4: Start additional peers
 
-- Peer discovery broadcast settings.
-- UDP listening port.
-- TCP chat server settings.
-- File transfer server settings.
-- Peer timeout and inactive peer cleanup intervals.
-- File storage directory.
+To test communication between multiple peers, open a separate terminal window for each peer. Run the application with a different peer ID, username, and chat port for each instance.
 
-Make sure that the selected ports are available and consistent across the application.
+**Peer A:**
 
-**Important:** All devices participating in the application should be connected to the same LAN. Ensure that the firewall allows the application's UDP and TCP traffic.
+```bash
+python src/main.py --peer-id A001 --username Alice --port 5001
+```
+
+**Peer B:**
+
+```bash
+python src/main.py --peer-id B001 --username Bob --port 5002
+```
+
+**Peer C:**
+
+```bash
+python src/main.py --peer-id C001 --username Charlie --port 5003
+```
+
+Each terminal window represents an independent peer running the application.
+
+**Notes:**
+- Each peer must have a unique peer ID.
+- When running multiple peers on the same computer, use different chat port numbers.
+- All peers must be connected to the same local network (LAN) to discover and communicate with each other.
+- Make sure the required ports are not blocked by the firewall.
+
+### Step 5: Configure command-line arguments (optional)
+
+The application supports the following command-line arguments:
+
+| Argument | Description | Default value |
+|---|---|---|
+| `--peer-id` | Unique identifier of the peer | Automatically generated from hostname |
+| `--username` | Display name of the user | System account name |
+| `--port` | TCP port used for chat communication | `CHAT_PORT` |
+| `--file-port` | TCP port used for file transfers | `FILE_PORT` |
+| `--interval` | Screen update interval (seconds) | `BROADCAST_INTERVAL` |
+| `--duration` | Duration of peer discovery test mode (seconds) | `None` |
+
+For example, to specify both chat and file transfer ports:
+
+```bash
+python src/main.py --peer-id A001 --username Alice --port 5001 --file-port 6001
+```
 
 ## 6. Running the Application
 ### Step 1: Start the first peer

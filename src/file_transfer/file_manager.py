@@ -11,6 +11,10 @@ from file_transfer.file_sender import FileSender
 from file_transfer.file_utils import get_file_info, validate_file
 from common.message import send_framed_message
 
+from prompt_toolkit.styles import Style
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit import print_formatted_text
+
 logger = logging.getLogger(__name__)
 
 
@@ -47,6 +51,40 @@ class FileManager:
         # Hàng đợi yêu cầu nhận file (chỉ chứa request chiều receive để UI lấy ra xử lý)
         self.file_request_queue: queue.Queue = queue.Queue()
 
+        #In màu
+        self.style = Style.from_dict({
+            "prompt": "#00ff87 bold",
+            "command": "#00afff bold",
+            "success": "#00ff91",
+            "error": "#ff5f5f bold",
+            "warning": "#ffaf00",
+            "system": "#888888",
+            "peer": "#5fd7ff bold",
+            "timestamp": "#888888 italic",
+        })
+
+    def display_error(self, message):
+        self.print_styled(
+            ("class:error", "[ERROR] "),
+            ("", message)
+        )
+    
+    def display_success(self, message):
+        self.print_styled(
+            ("class:success", "[SUCCESS] "),
+            ("", message)
+        )
+    def print_styled(self, *fragments):
+            """In nội dung có định dạng màu trên terminal."""
+            try:
+                print_formatted_text(
+                    FormattedText(fragments),
+                    style=self.style
+                )
+            except Exception:
+                plain_text = "".join(f[1] if isinstance(f, tuple) and len(f) > 1 else str(f) for f in fragments)
+                print(plain_text)
+    
     def set_chat_manager(self, chat_manager: Any) -> None:
         """Inject hoặc cập nhật ChatManager dependency."""
         with self.lock:
@@ -253,6 +291,9 @@ class FileManager:
                 port=port,
                 cancel_event=transfer["cancel_event"],
                 on_progress=lambda sent, total, prog: self._on_progress(transfer_id, prog),
+                on_complete=lambda filename: self.display_success(
+                    f"File received successfully: {filename}",
+                ),
             )
 
             if not sender.connect():
@@ -436,8 +477,14 @@ class FileManager:
         receiver = FileReceiver(
             download_dir=DOWNLOAD_DIR,
             on_progress=lambda sent, total, prog: self._on_progress(transfer_id, prog),
+            on_complete=lambda filename: self.display_success(
+                f"File received successfully: {filename}",
+            ),
+            on_error=lambda error: self.display_error(
+                f"File transfer failed: {error}",
+            ),
             cancel_event=transfer["cancel_event"],
-        )
+        )   
 
         success = receiver.receive_file_data(conn, transfer)
         if success:
@@ -445,6 +492,8 @@ class FileManager:
         else:
             final_status = "cancelled" if transfer["cancel_event"].is_set() else "failed"
             self.update_transfer_status(transfer_id, final_status)
+
+
 
     # ==========================================
     # TRẠNG THÁI VÀ QUẢN LÝ VÒNG ĐỜI TRANSFER
