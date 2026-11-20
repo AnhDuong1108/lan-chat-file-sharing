@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class FileSender:
     """Mỗi đối tượng quản lý một kết nối và một lần gửi đang hoạt động."""
 
-    def __init__(self, peer_id, ip, port, *, on_progress=None, cancel_event=None):
+    def __init__(self, peer_id, ip, port, *, on_progress=None, cancel_event=None, on_complete=None):
         """
         Chuẩn bị thông tin peer nhận và trạng thái truyền.
 
@@ -37,6 +37,8 @@ class FileSender:
         self.last_error = None
         self.cancel_event = cancel_event if cancel_event is not None else threading.Event()
         self.on_progress = on_progress
+        self.on_complete = on_complete
+
 
     def connect(self) -> bool:
         """Kết nối tới FileServer, giữ nguyên cờ hủy do FileManager quản lý."""
@@ -180,6 +182,11 @@ class FileSender:
                 if info["filesize"] == 0:
                     self._update_progress(0)
             self.last_error = None
+
+            logger.info("File received successfully: %s", info["filename"])
+            if self.on_complete is not None:
+                self.on_complete(info["filename"])    
+
             return True
         except (OSError, TypeError, ValueError) as exc:
             self.last_error = str(exc)

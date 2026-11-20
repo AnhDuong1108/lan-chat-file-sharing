@@ -1,7 +1,8 @@
 """Menu tổng hợp điều hướng giữa discovery, chat và giao diện truyền file."""
 
 from chat.chat_ui import ChatUI
-
+from prompt_toolkit import PromptSession
+from prompt_toolkit.styles import Style
 
 class UI:
     def __init__(
@@ -20,6 +21,30 @@ class UI:
         self.file_manager = file_manager
         self.chat_ui = chat_ui if chat_ui is not None else ChatUI(peer_manager, chat_manager, set_status)
         self.file_ui = file_ui
+
+        self.style = Style.from_dict({
+                "prompt": "#00ff87 bold",
+                "command": "#00afff bold",
+                "success": "#00ff91",
+                "error": "#ff5f5f bold",
+                "warning": "#ffaf00",
+                "system": "#888888",
+                "peer": "#5fd7ff bold",
+                "timestamp": "#888888 italic",
+            })
+        self.session = PromptSession(style=self.style,
+                                        erase_when_done=True)
+
+    def get_choice(self) -> str:
+        if self.session is not None:
+            try:
+                choice = self.session.prompt([("class:choice", "[?] ")])
+            except Exception:
+                choice = input("[?] ")
+        else:
+            choice = input("[?] ")
+
+        return choice.strip() 
 
     def display_main_menu(self):
         """Display the main menu and prompt the user for a command."""
@@ -69,8 +94,8 @@ class UI:
             if not first:
                 print("================ MAIN MENU ===============")
             first = False
-            
-            choice = input()
+
+            choice = self.get_choice()
             if choice == "/chat":
                 self.display_chat_menu()
             elif choice == "/files":

@@ -4,6 +4,8 @@ from typing import Any, Optional
 from peer_discovery.peer_manager import PeerManager
 from chat.chat_manager import ChatManager
 from file_transfer.file_manager import FileManager
+
+from prompt_toolkit import PromptSession
 from prompt_toolkit.styles import Style
 from prompt_toolkit.formatted_text import FormattedText
 from prompt_toolkit import print_formatted_text
@@ -38,10 +40,16 @@ class FileUI:
                 "timestamp": "#888888 italic",
             })
         
+        
         self.file_manager = file_manager
         if self.file_manager:
             self.file_manager.on_progress = self.display_transfer_progress
 
+        try:
+            self.session = PromptSession(style=self.style,
+                                        erase_when_done=True)
+        except Exception:
+            self.session = None
         self.chat_manager = chat_manager
         self.peer_manager = peer_manager
         self.chat_ui = chat_ui
@@ -60,6 +68,17 @@ class FileUI:
         except Exception:
             plain_text = "".join(f[1] if isinstance(f, tuple) and len(f) > 1 else str(f) for f in fragments)
             print(plain_text)
+
+    def get_choice(self) -> str:
+        if self.session is not None:
+            try:
+                choice = self.session.prompt([("class:choice", "[?] ")])
+            except Exception:
+                choice = input("[?] ")
+        else:
+            choice = input("[?] ")
+
+        return choice.strip() 
 
     def display_error(self, message):
             self.print_styled(
@@ -259,14 +278,15 @@ class FileUI:
 
         filename = transfer.get("file_name", "Unknown")
         peer_id = transfer.get("peer_id", "Unknown")
+        peername = self.peer_manager.get_peer(peer_id).get("username", "Unknown")
         progress = float(transfer.get("progress", 0))
 
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
         print(
-            f"\r[File Transfer] {filename} | "
-            f"Peer: {peer_id} | "
+            f"\r\033[96m[File Transfer]\033[0m {filename} | "
+            f"Peer: {peername} | "
             f"{progress:.1f}% "
             f"({transferred}/{file_size} bytes)",
             end="",
@@ -370,7 +390,7 @@ class FileUI:
     def start(self) -> None:
         self.display_help_menu()
         while True:
-            choice = input()
+            choice = self.get_choice()
             if choice == "/requests":
                 self.process_pending_requests()
 
@@ -409,6 +429,7 @@ class FileUI:
                 self.display_help_menu()
 
             elif choice == "/quit":
+                print("Return to Main Menu ...")
                 break
 
             else:
