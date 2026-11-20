@@ -109,13 +109,13 @@ class FileSender:
                     f"received={response.get('transfer_id')}"
                 )
 
-            if (
-                response is None
-                or response.get("type") != "file_data_ready"
-                or response.get("transfer_id") != transfer_id
-                or response.get("status") != "accept"
-            ):
-                raise OSError("File TCP handshake rejected or invalid")
+            if response.get("status") != "accept":
+                reason = response.get("reason")
+                if isinstance(reason, str) and reason.strip():
+                    raise OSError(f"Receiver rejected file transfer: {reason}")
+                raise OSError(
+                    f"File TCP handshake rejected (status: {response.get('status')!r})"
+                )
             if self.cancel_event.is_set():
                 raise OSError("Transfer cancelled")
             self.transfer_info = info
