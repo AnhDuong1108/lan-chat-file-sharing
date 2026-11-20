@@ -2,6 +2,7 @@ import logging
 import queue
 import threading
 import uuid
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from config import DOWNLOAD_DIR, FILE_PORT
@@ -397,18 +398,32 @@ class FileManager:
                     transfer = t
                     break
 
-        # Kiểm tra tính hợp lệ của transfer
-        is_valid = (
-            transfer is not None
-            and transfer.get("direction") == "receive"
-            and transfer.get("status") in ("accepted", "transferring")
-        )
+        # Tạo lý do cụ thể để bên gửi có thể giải thích handshake bị từ chối.
+        reject_reason = None
+        if transfer is None:
+            reject_reason = "Transfer ID is not registered"
+        elif transfer.get("direction") != "receive":
+            reject_reason = "Transfer is not registered as an incoming file"
+        elif transfer.get("status") not in ("accepted", "transferring"):
+            reject_reason = f"Transfer is not accepted (status: {transfer.get('status')!r})"
+        elif not FileReceiver._validate_transfer_info(transfer):
+            reject_reason = "Transfer metadata is invalid"
+        else:
+            destination = Path(DOWNLOAD_DIR).resolve() / transfer["filename"]
+            if destination.exists():
+                reject_reason = f"File '{transfer['filename']}' already exists in downloads folder"
 
-        if not is_valid:
+        if reject_reason:
+            logger.warning("Rejecting file handshake for transfer %s: %s", transfer_id, reject_reason)
             try:
                 send_framed_message(
                     conn,
-                    {"type": "file_data_ready", "transfer_id": transfer_id or "", "status": "reject"},
+                    {
+                        "type": "file_data_ready",
+                        "transfer_id": transfer_id or "",
+                        "status": "reject",
+                        "reason": reject_reason,
+                    },
                 )
             except Exception:
                 pass
