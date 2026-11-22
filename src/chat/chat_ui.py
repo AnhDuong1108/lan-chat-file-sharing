@@ -251,6 +251,17 @@ class ChatUI:
 
         return message.strip()
 
+    def get_choice(self) -> str:
+        if self.session is not None:
+            try:
+                choice = self.session.prompt([("class:choice", "[?] ")])
+            except Exception:
+                choice = input("[?] ")
+        else:
+            choice = input("[?] ")
+
+        return choice.strip() 
+
     # ==========================================
     # DISPLAY INCOMING MESSAGE
     # ==========================================
@@ -772,15 +783,15 @@ class ChatUI:
 
         filename = transfer.get("file_name", "Unknown")
         peer_id = transfer.get("peer_id", "Unknown")
+        peername = self.peer_manager.get_peer(peer_id).get("username", "Unknown")
         progress = float(transfer.get("progress", 0))
 
         file_size = transfer.get("file_size", 0)
         transferred = int(file_size * progress / 100)
 
-        self.display_success("")
         print(
-            f"\r[File Transfer] {filename} | "
-            f"Peer: {peer_id} | "
+            f"\r\033[96m[File Transfer]\033[0m {filename} | "
+            f"Peer: {peername} | "
             f"{progress:.1f}% "
             f"({transferred}/{file_size} bytes)",
             end="",
@@ -857,7 +868,7 @@ class ChatUI:
         while True:
 
             self.leave = False
-            choice = input()
+            choice = self.get_choice()
 
             # 1. View online peers
             if choice == "/list":
@@ -897,17 +908,17 @@ class ChatUI:
                     if self.end == True or self.leave == True:
                         break
 
-                    args = input()
+                    args = self.get_choice()
 
             # 5. Exit
             elif choice == "/quit":
-                print("Exiting P2P Chat App...")
+                print("Return to Main Menu ...")
                 return
 
             else:
                 print("Invalid option. Please try again.")
                 
             if (self.end == True):
-                print("Exiting P2P Chat App...")         
+                print("Return to Main Menu ...")         
                 return
 
