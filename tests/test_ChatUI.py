@@ -33,7 +33,7 @@ TEST CASES - CHAT UI
 
 16. test_start_change_status: Kiểm tra chức năng thay đổi trạng thái từ menu.
 
-17. test_start_exit: Kiểm tra chức năng thoát ứng dụng.
+17. test_start_exit: Kiểm tra quay về menu chính khi nhập /quit.
 
 18. test_start_invalid_option: Kiểm tra khi nhập lựa chọn menu không hợp lệ.
 
@@ -80,7 +80,7 @@ class TestChatUI(unittest.TestCase):
         self.ui.chat_manager.unread_counts = {}
 
         self.ui.style = None
-        self.ui.session = None
+        self.ui.session = MagicMock()
         self.ui.presence_broadcaster = SimpleNamespace(_socket=MagicMock())
         self.ui.last_message_time = {}
         self.ui.notifications = []
@@ -223,8 +223,6 @@ class TestChatUI(unittest.TestCase):
         self.assertIn("3", output)
 
     # 8. Unknown peer in unread notifications.
-    # This test expresses the expected fallback behavior. The current
-    # implementation dereferences None and will fail until it is fixed.
     def test_display_unread_notifications_unknown_peer(self):
         self.ui.peer_manager.get_peer.return_value = None
 
@@ -245,6 +243,44 @@ class TestChatUI(unittest.TestCase):
 
         self.assertEqual(result, "hello world")
         session.prompt.assert_called_once()
+
+    def test_get_choice_uses_prompt_session(self):
+        self.ui.session.prompt.return_value = "  /help  "
+
+        with patch("builtins.input") as user_input:
+            self.assertEqual(self.ui.get_choice(), "/help")
+
+        self.ui.session.prompt.assert_called_once()
+        user_input.assert_not_called()
+
+    def test_get_choice_falls_back_to_input(self):
+        for session in (None, MagicMock()):
+            with self.subTest(session_available=session is not None):
+                self.ui.session = session
+                if session is not None:
+                    session.prompt.side_effect = OSError("Terminal unavailable")
+                with patch("builtins.input", return_value="  /quit  ") as user_input:
+                    self.assertEqual(self.ui.get_choice(), "/quit")
+                user_input.assert_called_once()
+
+    def test_display_transfer_progress_peer_fallback(self):
+        self.ui.file_manager = MagicMock()
+        transfer = {
+            "status": "transferring", "peer_id": "peer-1",
+            "file_name": "sample.txt", "file_size": 100, "progress": 50.0,
+        }
+        for peer, name in (
+            ({"username": "Alice"}, "Alice"),
+            (None, "peer-1"),
+            ({}, "peer-1"),
+            ({"username": ""}, "peer-1"),
+        ):
+            with self.subTest(peer=peer):
+                self.ui.peer_manager.get_peer.return_value = peer
+                with patch("builtins.print") as output:
+                    self.ui.display_transfer_progress(transfer)
+                self.assertIn(f"Peer: {name}", output.call_args.args[0])
+                self.assertIn("50.0%", output.call_args.args[0])
 
     # 10. Incoming message from a known peer
     def test_display_incoming_message(self):
@@ -323,38 +359,48 @@ class TestChatUI(unittest.TestCase):
     def test_start_change_status(self, mocked_broadcast):
         self.ui.peer_manager.set_status.return_value = True
 
-        with patch("builtins.input", side_effect=["/status online", "/quit"]), patch(
+        self.ui.session.prompt.side_effect = ["/status online", "/quit"]
+        with patch("builtins.input", side_effect=AssertionError("Menu must use PromptSession")) as user_input, patch(
             "builtins.print"
         ):
             self.ui.start()
 
         self.ui.peer_manager.set_status.assert_called_once_with("online")
         mocked_broadcast.assert_called_once()
+        self.assertEqual(self.ui.session.prompt.call_count, 2)
+        user_input.assert_not_called()
 
-    # 17. Exit from start menu
+    # 17. Return to main menu
     def test_start_exit(self):
-        with patch("builtins.input", return_value="/quit"), patch(
+        self.ui.session.prompt.return_value = "/quit"
+        with patch("builtins.input", side_effect=AssertionError("Menu must use PromptSession")) as user_input, patch(
             "builtins.print"
         ) as mocked_print:
             result = self.ui.start()
 
         self.assertIsNone(result)
         self.assertIn(
-            "Exiting P2P Chat App...",
+            "Return to Main Menu ...",
             " ".join(str(c) for c in mocked_print.call_args_list),
         )
+        self.ui.session.prompt.assert_called_once()
+        user_input.assert_not_called()
 
     # 18. Invalid menu option
     def test_start_invalid_option(self):
-        with patch(
-            "builtins.input", side_effect=["/not-a-command", "/quit"]
-        ), patch("builtins.print") as mocked_print:
+        self.ui.session.prompt.side_effect = ["/not-a-command", "/quit"]
+        with (
+            patch("builtins.input", side_effect=AssertionError("Menu must use PromptSession")) as user_input,
+            patch("builtins.print") as mocked_print,
+        ):
             self.ui.start()
 
         self.assertIn(
             "Invalid option. Please try again.",
             " ".join(str(c) for c in mocked_print.call_args_list),
         )
+        self.assertEqual(self.ui.session.prompt.call_count, 2)
+        user_input.assert_not_called()
 
     def _configure_one_online_peer(self):
         peer = {

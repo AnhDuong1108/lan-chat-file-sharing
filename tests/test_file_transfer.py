@@ -445,27 +445,58 @@ class TestFileTransfer(unittest.TestCase):
 
 
 class TestCombinedUI(unittest.TestCase):
+    def setUp(self):
+        # Mock constructors so these menu tests never need a Windows console.
+        for target in (
+            "ui.PromptSession",
+            "chat.chat_ui.PromptSession",
+            "file_transfer.file_ui.PromptSession",
+            "chat.chat_ui.PresenceBroadcaster",
+        ):
+            patcher = patch(target, side_effect=lambda *args, **kwargs: Mock())
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        user_input = patch(
+            "builtins.input", side_effect=AssertionError("Menu must use PromptSession")
+        )
+        self.user_input = user_input.start()
+        self.addCleanup(user_input.stop)
+
+    def test_get_choice_uses_prompt_session(self):
+        ui = UI(Mock(), Mock(), None, chat_ui=Mock())
+        ui.session.prompt.return_value = "  /help  "
+        self.assertEqual(ui.get_choice(), "/help")
+        ui.session.prompt.assert_called_once()
+        self.user_input.assert_not_called()
+
+    def test_get_choice_falls_back_to_input(self):
+        ui = UI(Mock(), Mock(), None, chat_ui=Mock())
+        for session in (None, Mock()):
+            with self.subTest(session_available=session is not None):
+                ui.session = session
+                if session is not None:
+                    session.prompt.side_effect = OSError("Terminal unavailable")
+                with patch("builtins.input", return_value="  /quit  ") as user_input:
+                    self.assertEqual(ui.get_choice(), "/quit")
+                user_input.assert_called_once()
+
     def test_real_chat_ui_returns_to_main_menu(self):
         """UI thật mở menu chat rồi trở về menu chính với đầu vào, đầu ra giả lập."""
-        from prompt_toolkit.application import create_app_session
-        from prompt_toolkit.input import DummyInput
-        from prompt_toolkit.output import DummyOutput
-
-        with create_app_session(input=DummyInput(), output=DummyOutput()), patch(
-            "chat.chat_ui.PresenceBroadcaster"
+        ui = UI(Mock(), Mock(), None)
+        ui.session.prompt.side_effect = ["/chat", "/help", "/quit"]
+        ui.chat_ui.session.prompt.return_value = "/quit"
+        with (
+            patch("builtins.print") as output,
+            patch.object(ui.chat_ui, "display_help_menu", wraps=ui.chat_ui.display_help_menu) as chat_help,
+            patch.object(ui, "display_main_menu", wraps=ui.display_main_menu) as main_menu,
         ):
-            ui = UI(Mock(), Mock(), None)
-            with (
-                patch("builtins.input", side_effect=["/chat", "/quit", "/help", "/quit"]) as user_input,
-                patch("builtins.print") as output,
-                patch.object(ui.chat_ui, "display_help_menu", wraps=ui.chat_ui.display_help_menu) as chat_help,
-                patch.object(ui, "display_main_menu", wraps=ui.display_main_menu) as main_menu,
-            ):
-                ui.start()
-            chat_help.assert_called_once_with()
-            self.assertEqual(main_menu.call_count, 2)
-            self.assertEqual(user_input.call_count, 4)
-            self.assertNotIn(call("Invalid option. Please try again."), output.call_args_list)
+            ui.start()
+        chat_help.assert_called_once_with()
+        self.assertEqual(main_menu.call_count, 2)
+        self.assertEqual(ui.session.prompt.call_count, 3)
+        ui.chat_ui.session.prompt.assert_called_once()
+        self.user_input.assert_not_called()
+        self.assertNotIn(call("Invalid option. Please try again."), output.call_args_list)
 
     def test_real_file_ui_returns_to_main_menu(self):
         """FileUI thật nhận /quit rồi trả quyền xử lý /help cho menu chính."""
@@ -477,8 +508,9 @@ class TestCombinedUI(unittest.TestCase):
             with patch("file_transfer.file_ui.os.path.abspath", side_effect=lambda path: str(root / path)):
                 file_ui = FileUI(files, chats, peers, chat_ui)
             ui = UI(peers, chats, files, chat_ui=chat_ui, file_ui=file_ui)
+            ui.session.prompt.side_effect = ["/files", "/help", "/quit"]
+            file_ui.session.prompt.return_value = "/quit"
             with (
-                patch("builtins.input", side_effect=["/files", "/quit", "/help", "/quit"]) as user_input,
                 patch("builtins.print") as output,
                 patch.object(file_ui, "display_help_menu", wraps=file_ui.display_help_menu) as file_help,
                 patch.object(ui, "display_main_menu", wraps=ui.display_main_menu) as main_menu,
@@ -486,7 +518,9 @@ class TestCombinedUI(unittest.TestCase):
                 ui.start()
             file_help.assert_called_once_with()
             self.assertEqual(main_menu.call_count, 2)
-            self.assertEqual(user_input.call_count, 4)
+            self.assertEqual(ui.session.prompt.call_count, 3)
+            file_ui.session.prompt.assert_called_once()
+            self.user_input.assert_not_called()
             self.assertNotIn(call("Invalid option. Please try again."), output.call_args_list)
             self.assertNotIn(call("Invalid option"), output.call_args_list)
             self.assertEqual(Path(file_ui.docs_dir).parent, root)
@@ -515,13 +549,14 @@ class TestCombinedUI(unittest.TestCase):
         routes = Mock()
         routes.attach_mock(chat_type.return_value.start, "chat")
         routes.attach_mock(file_ui.start, "files")
+        ui.session.prompt.side_effect = ["bad", "/chat", "/files", "/quit"]
         with (
-            patch("builtins.input", side_effect=["bad", "/chat", "/files", "/quit"]) as user_input,
             patch("builtins.print") as output,
         ):
             ui.start()
         self.assertEqual(routes.mock_calls, [call.chat(), call.files()])
-        self.assertEqual(user_input.call_count, 4)
+        self.assertEqual(ui.session.prompt.call_count, 4)
+        self.user_input.assert_not_called()
         self.assertEqual(output.call_args_list.count(call("Invalid option. Please try again.")), 1)
         self.assertIs(ui.file_manager, files)
 
