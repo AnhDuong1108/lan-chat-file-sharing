@@ -55,7 +55,8 @@ class TestChat(unittest.TestCase):
     def make_ui(self, peer_id):
         peers = PeerManager(peer_id)
         manager = ChatManager(peer_id, peers)
-        return ChatUI(peers, manager)
+        with patch("chat.chat_ui.PromptSession"), patch("chat.chat_ui.PresenceBroadcaster"):
+            return ChatUI(peers, manager)
 
     def test_tc01_connection_refused(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as reserved:

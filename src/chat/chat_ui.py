@@ -783,7 +783,8 @@ class ChatUI:
 
         filename = transfer.get("file_name", "Unknown")
         peer_id = transfer.get("peer_id", "Unknown")
-        peername = self.peer_manager.get_peer(peer_id).get("username", "Unknown")
+        peer = self.peer_manager.get_peer(peer_id) or {}
+        peername = peer.get("username") or peer_id
         progress = float(transfer.get("progress", 0))
 
         file_size = transfer.get("file_size", 0)

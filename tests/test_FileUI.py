@@ -36,6 +36,9 @@ from file_transfer.file_ui import FileUI
 class TestFileUI(unittest.TestCase):
 
     def setUp(self):
+        terminal = patch("file_transfer.file_ui.PromptSession")
+        self.session_type = terminal.start()
+        self.addCleanup(terminal.stop)
         self.file_manager = MagicMock()
         self.chat_manager = MagicMock()
         self.peer_manager = MagicMock()
@@ -85,6 +88,56 @@ class TestFileUI(unittest.TestCase):
             )
 
         self.assertIsNone(ui.file_manager)
+
+    def test_get_choice_uses_prompt_session(self):
+        self.ui.session.prompt.return_value = "  /help  "
+        with patch("builtins.input") as user_input:
+            self.assertEqual(self.ui.get_choice(), "/help")
+        self.ui.session.prompt.assert_called_once()
+        user_input.assert_not_called()
+
+    def test_get_choice_falls_back_to_input(self):
+        for session in (None, MagicMock()):
+            with self.subTest(session_available=session is not None):
+                self.ui.session = session
+                if session is not None:
+                    session.prompt.side_effect = OSError("Terminal unavailable")
+                with patch("builtins.input", return_value="  /quit  ") as user_input:
+                    self.assertEqual(self.ui.get_choice(), "/quit")
+                user_input.assert_called_once()
+
+    def test_start_returns_after_help_and_sessions(self):
+        self.ui.session.prompt.side_effect = ["/sessions", "/help", "/quit"]
+        with (
+            patch.object(self.ui, "show_transfer_status") as sessions,
+            patch.object(self.ui, "display_help_menu") as help_menu,
+            patch("builtins.input", side_effect=AssertionError("Menu must use PromptSession")) as user_input,
+            patch("builtins.print") as output,
+        ):
+            self.ui.start()
+        sessions.assert_called_once_with()
+        self.assertEqual(help_menu.call_count, 2)
+        self.assertEqual(self.ui.session.prompt.call_count, 3)
+        output.assert_any_call("Return to Main Menu ...")
+        user_input.assert_not_called()
+
+    def test_display_transfer_progress_peer_fallback(self):
+        transfer = {
+            "status": "transferring", "peer_id": "peer-1",
+            "file_name": "sample.txt", "file_size": 100, "progress": 50.0,
+        }
+        for peer, name in (
+            ({"username": "Alice"}, "Alice"),
+            (None, "peer-1"),
+            ({}, "peer-1"),
+            ({"username": ""}, "peer-1"),
+        ):
+            with self.subTest(peer=peer):
+                self.peer_manager.get_peer.return_value = peer
+                with patch("builtins.print") as output:
+                    self.ui.display_transfer_progress(transfer)
+                self.assertIn(f"Peer: {name}", output.call_args.args[0])
+                self.assertIn("50.0%", output.call_args.args[0])
 
     # =====================================================
     # 2. DISPLAY FUNCTIONS
