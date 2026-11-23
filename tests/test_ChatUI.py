@@ -81,7 +81,7 @@ class TestChatUI(unittest.TestCase):
 
         self.ui.style = None
         self.ui.session = MagicMock()
-        self.ui.presence_broadcaster = SimpleNamespace(_socket=MagicMock())
+        self.ui.set_status = MagicMock()
         self.ui.last_message_time = {}
         self.ui.notifications = []
         self.ui.incoming_message_queue = MagicMock()
@@ -320,43 +320,40 @@ class TestChatUI(unittest.TestCase):
         self.assertIn("Who are you?", output)
 
     # 12–13. Change status to online / away
-    @patch.object(chat_ui_module, "broadcast_presence")
-    def test_change_status_online(self, mocked_broadcast):
+    def test_change_status_online(self):
         self.ui.peer_manager.set_status.return_value = True
 
         self.assertTrue(self.ui.change_status("online"))
 
+        self.ui.set_status.assert_called_once_with("online")
         self.ui.peer_manager.set_status.assert_called_once_with("online")
-        mocked_broadcast.assert_called_once_with(
-            self.ui.presence_broadcaster._socket,
-            "self-id",
-            "Me",
-            5000,
-            "online",
-        )
 
-    @patch.object(chat_ui_module, "broadcast_presence")
-    def test_change_status_away(self, mocked_broadcast):
+    def test_change_status_away(self):
         self.ui.peer_manager.set_status.return_value = True
 
         self.assertTrue(self.ui.change_status("away"))
 
+        self.ui.set_status.assert_called_once_with("away")
         self.ui.peer_manager.set_status.assert_called_once_with("away")
-        self.assertEqual(mocked_broadcast.call_args.args[-1], "away")
 
     # 14. Invalid status
-    @patch.object(chat_ui_module, "broadcast_presence")
-    def test_change_status_invalid(self, mocked_broadcast):
-        self.ui.peer_manager.set_status.return_value = False
-
+    def test_change_status_invalid(self):
         self.assertFalse(self.ui.change_status("busy"))
 
-        mocked_broadcast.assert_not_called()
+        self.ui.set_status.assert_not_called()
+        self.ui.peer_manager.set_status.assert_not_called()
 
+    # 15. Broadcaster stopped
+    def test_change_status_callback_failure(self):
+        self.ui.set_status.side_effect = RuntimeError("Broadcaster stopped")
+
+        with self.assertLogs(chat_ui_module.logger, level="ERROR"):
+            self.assertFalse(self.ui.change_status("away"))
+
+        self.ui.peer_manager.set_status.assert_not_called()
 
     # 16. Start menu: change status
-    @patch.object(chat_ui_module, "broadcast_presence")
-    def test_start_change_status(self, mocked_broadcast):
+    def test_start_change_status(self):
         self.ui.peer_manager.set_status.return_value = True
 
         self.ui.session.prompt.side_effect = ["/status online", "/quit"]
@@ -366,7 +363,7 @@ class TestChatUI(unittest.TestCase):
             self.ui.start()
 
         self.ui.peer_manager.set_status.assert_called_once_with("online")
-        mocked_broadcast.assert_called_once()
+        self.ui.set_status.assert_called_once_with("online")
         self.assertEqual(self.ui.session.prompt.call_count, 2)
         user_input.assert_not_called()
 

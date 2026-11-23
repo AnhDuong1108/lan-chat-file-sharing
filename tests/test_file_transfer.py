@@ -451,7 +451,6 @@ class TestCombinedUI(unittest.TestCase):
             "ui.PromptSession",
             "chat.chat_ui.PromptSession",
             "file_transfer.file_ui.PromptSession",
-            "chat.chat_ui.PresenceBroadcaster",
         ):
             patcher = patch(target, side_effect=lambda *args, **kwargs: Mock())
             patcher.start()
