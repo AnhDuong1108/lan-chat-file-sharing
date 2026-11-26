@@ -11,7 +11,6 @@ import threading
 from chat.chat_client import ChatClient
 from chat.chat_manager import ChatManager
 from chat.chat_message import create_chat_message, validate_chat_message
-from peer_discovery.broadcast import PresenceBroadcaster, broadcast_presence
 from peer_discovery.peer_manager import PeerManager
 from file_transfer.file_manager import FileManager
 from typing import Dict, Optional
@@ -61,15 +60,6 @@ class ChatUI:
         self.file_dir = os.path.abspath("docs")
 
         self.file_manager: Optional[FileManager] = None
-        try:
-            self.presence_broadcaster = PresenceBroadcaster(
-                str(getattr(self.peer_manager, "self_peer_id", "local")), 
-                str(getattr(self.peer_manager, "username", "User")),
-                int(getattr(self.peer_manager, "tcp_port", 5000)) if isinstance(getattr(self.peer_manager, "tcp_port", None), int) else 5000
-            )
-            self.presence_broadcaster._thread.start()
-        except Exception:
-            self.presence_broadcaster = None
 
         # Current chat peer
         self.peer_current = {}
@@ -373,19 +363,20 @@ class ChatUI:
     # ==========================================
 
     def change_status(self, status: str) -> bool:
+        """Update the shared broadcaster and local presence status."""
+        if status not in ("online", "away"):
+            return False
+
+        if not callable(self.set_status):
+            logger.error("Status callback is unavailable")
+            return False
 
         try:
-            if not self.peer_manager.set_status(status):  
-               return False
-            
-            broadcast_presence(self.presence_broadcaster._socket,
-                               self.peer_manager.self_peer_id, self.peer_manager.username,
-                               self.peer_manager.tcp_port, status)
-            
-            return True
+            self.set_status(status)
+            return self.peer_manager.set_status(status)
 
-        except (RuntimeError, ValueError) as e:
-            logger.error("Could not change status: %s", e)
+        except (RuntimeError, ValueError, OSError) as exc:
+            logger.error("Could not change status: %s", exc)
             return False
 
     # ==========================================
@@ -881,11 +872,10 @@ class ChatUI:
 
             # 3. Change status
             elif match := re.match(r"^/status\s+(online|away)$", choice):
+                status = match.group(1)
 
-                [command, args] = choice.split(" ")
-                
-                if self.change_status(args):
-                    self.display_success(f"Status changed to {args}")
+                if self.change_status(status):
+                    self.display_success(f"Status changed to {status}")
                 else:
                     self.display_error("Could not change status")
 
